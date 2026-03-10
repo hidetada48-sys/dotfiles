@@ -5,20 +5,11 @@
 GDRIVE_FOLDER="gdrive:claude-sync"
 LOG_FILE="/tmp/claude-sync.log"
 
-# rcloneのパスを通す（インストール場所を自動検索）
-RCLONE_PATH=$(find "$HOME/AppData/Local/Microsoft/WinGet/Packages" -name "rclone.exe" 2>/dev/null | head -1)
-if [ -n "$RCLONE_PATH" ]; then
-  export PATH="$PATH:$(dirname "$RCLONE_PATH")"
-fi
-
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] ダウンロード開始" >> "$LOG_FILE"
 
-# MEMORY.mdをダウンロード（どのPCでも動的にパスを取得）
-MEMORY_DIR=$(ls -d "$HOME/.claude/projects/"*/memory 2>/dev/null | head -1)
-if [ -z "$MEMORY_DIR" ]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] memoryディレクトリが見つかりません" >> "$LOG_FILE"
-  exit 1
-fi
+# MEMORY.mdをダウンロード
+MEMORY_DIR="$HOME/.claude/projects/-home-hidetada48/memory"
+mkdir -p "$MEMORY_DIR"
 rclone copy "$GDRIVE_FOLDER/MEMORY.md" "$MEMORY_DIR/" --update 2>> "$LOG_FILE"
 
 # claude-mem DBをダウンロード（ファイルが存在しない場合のみ）
