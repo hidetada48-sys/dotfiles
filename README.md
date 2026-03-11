@@ -1,126 +1,78 @@
-# dotfiles - Claude Code 環境セットアップ
+# dotfiles
 
-別PCでClaude Codeの環境を再現するための手順書。
+Claude Codeの設定と、複数PC間でのメモリ同期の仕組みを管理するリポジトリ。
+
+## 構成
+
+```
+dotfiles/
+├── CLAUDE.md                    # Claude Codeへの個人ルール
+└── claude/
+      ├── settings.json          # フック設定（セッション開始/終了時の同期）
+      └── scripts/
+            ├── gdrive-download.sh  # セッション開始時にGoogle Driveからダウンロード
+            └── gdrive-upload.sh    # セッション終了時にGoogle Driveへアップロード
+```
+
+## メモリ同期の仕組み
+
+Claude Codeのセッション開始・終了時にGoogle Driveと自動同期することで、複数PC間でメモリを共有する。
+
+```
+PC-A でセッション終了 → Google Driveへアップロード
+PC-B でセッション開始 → Google Driveからダウンロード
+```
+
+同期対象：
+- `MEMORY.md` — Claude Codeの作業メモリ
+- `claude-mem.db` — claude-memプラグインのデータベース
 
 ---
 
-## このリポジトリに含まれるもの
+## 別PCでのセットアップ手順
 
-| ファイル | 役割 |
-|---------|------|
-| `CLAUDE.md` | Claudeの行動ルール（日本語回答・シンプル説明など） |
-| `claude/settings.json` | Claude Code本体の設定（モデル・プラグイン・フック） |
-| `claude/scripts/gdrive-download.sh` | セッション開始時にGoogle DriveからMEMORY.mdを取得 |
-| `claude/scripts/gdrive-upload.sh` | セッション終了時にMEMORY.mdをGoogle Driveに保存 |
+### 前提条件
 
----
+以下がインストール済みであること。
 
-## セットアップ手順
+- [Claude Code](https://claude.ai/code)
+- [rclone](https://rclone.org/)
+- git
 
-### 1. このリポジトリをclone
+### 手順
 
-```bash
-git clone https://github.com/hidetada48-sys/dotfiles.git ~/dotfiles
-```
-
-### 2. ファイルを所定の場所に配置
+**① dotfiles をクローン**
 
 ```bash
-# Claude Code設定ディレクトリを作成
-mkdir -p ~/.claude/scripts
-
-# CLAUDE.md（Claudeのルール）
-cp ~/dotfiles/CLAUDE.md ~/.claude/CLAUDE.md
-
-# settings.json（Claude Code設定）
-cp ~/dotfiles/claude/settings.json ~/.claude/settings.json
-
-# 同期スクリプト
-cp ~/dotfiles/claude/scripts/gdrive-download.sh ~/.claude/scripts/
-cp ~/dotfiles/claude/scripts/gdrive-upload.sh ~/.claude/scripts/
-
-# スクリプトに実行権限を付与
-chmod +x ~/.claude/scripts/gdrive-download.sh
-chmod +x ~/.claude/scripts/gdrive-upload.sh
+git clone https://github.com/ユーザー名/dotfiles.git ~/dotfiles
 ```
 
-### 3. rcloneをインストール（Google Drive同期用）
-
-```bash
-curl https://rclone.org/install.sh | sudo bash
-```
-
-インストール後、Google Driveを設定：
+**② rclone でGoogle Driveを認証**
 
 ```bash
 rclone config
 ```
 
-設定の流れ：
-1. `n` → 新規リモート作成
-2. 名前: `gdrive`
-3. ストレージ: `drive`（Google Drive）
-4. Client ID / Secret: そのままEnter（空欄でOK）
-5. スコープ: `1`（フルアクセス）
-6. ブラウザ認証を完了する
+対話形式で設定する。以下の点に注意：
+- リモート名は `gdrive` にする
+- タイプは `drive`（Google Drive）を選ぶ
+- ブラウザでGoogleアカウントの認証が必要
 
-確認：
-```bash
-rclone lsd gdrive:
-```
-
-### 4. GitHubトークンを設定
+**③ シンボリックリンクを貼る**
 
 ```bash
-echo 'export GITHUB_PERSONAL_ACCESS_TOKEN="your_token_here"' >> ~/.bashrc
-source ~/.bashrc
+ln -s ~/dotfiles/claude/scripts ~/.claude/scripts
+ln -s ~/dotfiles/claude/settings.json ~/.claude/settings.json
 ```
 
-※ トークンはGitHub → Settings → Developer settings → Personal access tokens で発行。
-
-### 5. GitHub MCPサーバーを設定
-
-Claude Codeを起動した状態で以下を実行（またはClaude Codeに依頼）：
+**④ 動作確認**
 
 ```bash
-claude mcp add github \
-  -e GITHUB_TOKEN=$GITHUB_PERSONAL_ACCESS_TOKEN \
-  -- npx -y @modelcontextprotocol/server-github
+# Google Driveから手動でダウンロード
+bash ~/.claude/scripts/gdrive-download.sh
+
+# ログを確認
+cat /tmp/claude-sync.log
 ```
 
-### 6. Claude Codeを起動
-
-```bash
-claude
-```
-
-初回起動時にclaude-memプラグインが自動インストールされる。  
-Google DriveからMEMORY.md（記憶ファイル）が自動ダウンロードされる。
-
----
-
-## 動作の仕組み
-
-```
-セッション開始
-    ↓
-gdrive-download.sh 実行
-    → Google Drive から MEMORY.md を取得
-    ↓
-Claude Codeで作業
-    ↓
-セッション終了
-    ↓
-gdrive-upload.sh 実行
-    → MEMORY.md を Google Drive に保存
-```
-
-記憶はGoogle Driveで同期されるため、**どのPCからでも同じ記憶を共有**できる。
-
----
-
-## 注意事項
-
-- `settings.local.json`（GitHubトークン等を含む）はセキュリティのためリポジトリに含めていない
-- rcloneのGoogle Drive認証は各PCで個別に実施が必要
-- GitHubトークンも各PCで個別に設定が必要
+`ダウンロード完了` と表示されれば成功。次回 Claude Code 起動時から自動で同期される。
