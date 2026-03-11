@@ -5,10 +5,16 @@
 GDRIVE_FOLDER="gdrive:claude-sync"
 LOG_FILE="/tmp/claude-sync.log"
 
+# rcloneをPATHから探し、見つからなければWinGet経由のパスを検索
+if ! command -v rclone &>/dev/null; then
+  RCLONE_PATH=$(find "$HOME/AppData/Local/Microsoft/WinGet/Packages" -name "rclone.exe" 2>/dev/null | head -1)
+  [ -n "$RCLONE_PATH" ] && export PATH="$PATH:$(dirname "$RCLONE_PATH")"
+fi
+
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] アップロード開始" >> "$LOG_FILE"
 
-# MEMORY.mdをアップロード
-MEMORY_FILE="$HOME/.claude/projects/-home-hidetada48/memory/MEMORY.md"
+# MEMORY.mdをアップロード（projectsディレクトリから動的にパスを取得）
+MEMORY_FILE=$(ls "$HOME/.claude/projects/"*/memory/MEMORY.md 2>/dev/null | head -1)
 if [ -f "$MEMORY_FILE" ]; then
   rclone copy "$MEMORY_FILE" "$GDRIVE_FOLDER/" 2>> "$LOG_FILE"
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] MEMORY.mdをアップロードしました" >> "$LOG_FILE"
