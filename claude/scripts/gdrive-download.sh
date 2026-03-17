@@ -29,4 +29,10 @@ if [ ! -f "$DB_DIR/claude-mem.db" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] DBをダウンロードしました" >> "$LOG_FILE"
 fi
 
+# processed_ids.jsonをダウンロード（ブックマーク処理済みリストをPC間で共有）
+BOOKMARK_SYNC_DIR="$HOME/.x-bookmark-sync"
+mkdir -p "$BOOKMARK_SYNC_DIR"
+rclone copy "$GDRIVE_FOLDER/processed_ids.json" "$BOOKMARK_SYNC_DIR/" --update 2>> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] processed_ids.jsonをダウンロードしました" >> "$LOG_FILE"
+
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] ダウンロード完了" >> "$LOG_FILE"

@@ -27,4 +27,11 @@ if [ -f "$DB_FILE" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] DBをアップロードしました" >> "$LOG_FILE"
 fi
 
+# processed_ids.jsonをアップロード（ブックマーク処理済みリストをPC間で共有）
+PROCESSED_IDS_FILE="$HOME/.x-bookmark-sync/processed_ids.json"
+if [ -f "$PROCESSED_IDS_FILE" ]; then
+  rclone copy "$PROCESSED_IDS_FILE" "$GDRIVE_FOLDER/" 2>> "$LOG_FILE"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] processed_ids.jsonをアップロードしました" >> "$LOG_FILE"
+fi
+
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] アップロード完了" >> "$LOG_FILE"
