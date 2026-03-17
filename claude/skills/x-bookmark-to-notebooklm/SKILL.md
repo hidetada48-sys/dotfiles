@@ -7,17 +7,19 @@ description: XのブックマークをテキストファイルとしてGoogle Dr
 
 XのブックマークをPlaywright（ブラウザ自動操作）で取得し、テキストファイルとしてGoogle Driveにアップロードする。NotebookLMはそのGoogle Driveフォルダをソースとして参照できる。
 
-## リポジトリ
+## リポジトリ・ファイル構成
 
 ```
 ~/test2/
-├── config.json          # 設定ファイル
-├── session.json         # Xのセッション（クッキー）
-├── processed_ids.json   # 処理済みツイートID
-├── output/              # 生成テキストファイル置き場
 └── scripts/
     ├── fetch_bookmarks.py   # メインスクリプト
     └── save_session.py      # 初回のみ：Xセッション保存
+
+~/.x-bookmark-sync/          # 設定・状態ファイル（PC間でGoogle Drive同期）
+├── config.json              # 設定ファイル
+├── session.json             # Xのセッション（クッキー）
+├── processed_ids.json       # 処理済みツイートID
+└── output/                  # 生成テキストファイル置き場
 ```
 
 ## 全体フロー
