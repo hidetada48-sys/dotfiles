@@ -41,6 +41,17 @@ cd ~/test2
 python3 scripts/fetch_bookmarks.py
 ```
 
+件数を指定する場合（「直近N件」と指示されたとき）：
+
+```bash
+cd ~/test2
+python3 scripts/fetch_bookmarks.py --limit N
+```
+
+- 件数指定なし → デフォルト25件（新着のみ）
+- `--limit 5` → ブックマーク最新順に最大5件を処理
+- ブックマークはXの並び順（ブックマークした新しい順）で取得される
+
 ---
 
 ## 初回セットアップ（セッション未保存の場合）
