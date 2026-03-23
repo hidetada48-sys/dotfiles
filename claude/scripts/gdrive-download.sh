@@ -21,18 +21,17 @@ if [ -z "$MEMORY_DIR" ]; then
 fi
 rclone copy "$GDRIVE_FOLDER/MEMORY.md" "$MEMORY_DIR/" --update 2>> "$LOG_FILE"
 
-# claude-mem DBをダウンロード（ファイルが存在しない場合のみ）
-DB_DIR="$HOME/.claude-mem"
-mkdir -p "$DB_DIR"
-if [ ! -f "$DB_DIR/claude-mem.db" ]; then
-  rclone copy "$GDRIVE_FOLDER/claude-mem.db" "$DB_DIR/" 2>> "$LOG_FILE"
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] DBをダウンロードしました" >> "$LOG_FILE"
-fi
 
 # processed_ids.jsonをダウンロード（ブックマーク処理済みリストをPC間で共有）
 BOOKMARK_SYNC_DIR="$HOME/.x-bookmark-sync"
 mkdir -p "$BOOKMARK_SYNC_DIR"
 rclone copy "$GDRIVE_FOLDER/processed_ids.json" "$BOOKMARK_SYNC_DIR/" --update 2>> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] processed_ids.jsonをダウンロードしました" >> "$LOG_FILE"
+
+# basic-memory ノートをダウンロード（セマンティック検索の元データ）
+BASIC_MEMORY_DIR="$HOME/basic-memory"
+mkdir -p "$BASIC_MEMORY_DIR"
+rclone sync "$GDRIVE_FOLDER/basic-memory/" "$BASIC_MEMORY_DIR" 2>> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] basic-memoryノートをダウンロードしました" >> "$LOG_FILE"
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] ダウンロード完了" >> "$LOG_FILE"

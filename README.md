@@ -24,8 +24,9 @@ PC-B でセッション開始 → Google Driveからダウンロード
 ```
 
 同期対象：
-- `MEMORY.md` — Claude Codeの作業メモリ
-- `claude-mem.db` — claude-memプラグインのデータベース
+- `MEMORY.md` — Claude Codeのテキストメモリ
+- `~/basic-memory/` — セマンティック検索付きメモリ（basic-memory MCP）
+- `processed_ids.json` — Xブックマーク処理済みリスト
 
 ---
 
@@ -37,6 +38,7 @@ PC-B でセッション開始 → Google Driveからダウンロード
 
 - [Claude Code](https://claude.ai/code)
 - [rclone](https://rclone.org/)
+- [basic-memory MCP](https://github.com/basicmachines-co/basic-memory)
 - git
 
 ### 手順
@@ -65,7 +67,13 @@ ln -s ~/dotfiles/claude/scripts ~/.claude/scripts
 ln -s ~/dotfiles/claude/settings.json ~/.claude/settings.json
 ```
 
-**④ 動作確認**
+**④ basic-memory MCPを登録**
+
+```bash
+claude mcp add basic-memory -s user -- uvx basic-memory mcp
+```
+
+**⑤ 動作確認**
 
 ```bash
 # Google Driveから手動でダウンロード

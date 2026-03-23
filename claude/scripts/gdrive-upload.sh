@@ -20,18 +20,19 @@ if [ -f "$MEMORY_FILE" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] MEMORY.mdをアップロードしました" >> "$LOG_FILE"
 fi
 
-# claude-mem DBをアップロード
-DB_FILE="$HOME/.claude-mem/claude-mem.db"
-if [ -f "$DB_FILE" ]; then
-  rclone copy "$DB_FILE" "$GDRIVE_FOLDER/" 2>> "$LOG_FILE"
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] DBをアップロードしました" >> "$LOG_FILE"
-fi
 
 # processed_ids.jsonをアップロード（ブックマーク処理済みリストをPC間で共有）
 PROCESSED_IDS_FILE="$HOME/.x-bookmark-sync/processed_ids.json"
 if [ -f "$PROCESSED_IDS_FILE" ]; then
   rclone copy "$PROCESSED_IDS_FILE" "$GDRIVE_FOLDER/" 2>> "$LOG_FILE"
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] processed_ids.jsonをアップロードしました" >> "$LOG_FILE"
+fi
+
+# basic-memory ノートをアップロード（セマンティック検索の元データ）
+BASIC_MEMORY_DIR="$HOME/basic-memory"
+if [ -d "$BASIC_MEMORY_DIR" ]; then
+  rclone sync "$BASIC_MEMORY_DIR" "$GDRIVE_FOLDER/basic-memory/" 2>> "$LOG_FILE"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] basic-memoryノートをアップロードしました" >> "$LOG_FILE"
 fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] アップロード完了" >> "$LOG_FILE"
