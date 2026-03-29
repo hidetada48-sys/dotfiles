@@ -11,7 +11,30 @@
   "enabledPlugins": {
     "claude-mem@thedotmack": false
   },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force *)",
+      "Read(**/.env)",
+      "Write(**/.env)"
+    ]
+  },
+  "disabledMcpServers": [
+    "claude.ai Gmail",
+    "claude.ai Google Calendar"
+  ],
   "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/post-tool-check.sh"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
@@ -28,6 +51,16 @@
           {
             "type": "command",
             "command": "bash ~/.claude/scripts/gdrive-upload.sh"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[PostCompact] コンテキスト圧縮完了。必要に応じてCLAUDE.mdや作業状況を再確認してください。'"
           }
         ]
       }
