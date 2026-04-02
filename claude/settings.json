@@ -1,29 +1,14 @@
 {
-  "model": "sonnet",
-  "extraKnownMarketplaces": {
-    "thedotmack": {
-      "source": {
-        "source": "github",
-        "repo": "thedotmack/claude-mem"
-      }
-    }
-  },
-  "enabledPlugins": {
-    "claude-mem@thedotmack": false
-  },
   "permissions": {
-    "defaultMode": "acceptEdits",
     "deny": [
       "Bash(rm -rf *)",
       "Bash(git push --force *)",
       "Read(**/.env)",
       "Write(**/.env)"
-    ]
+    ],
+    "defaultMode": "acceptEdits"
   },
-  "disabledMcpServers": [
-    "claude.ai Gmail",
-    "claude.ai Google Calendar"
-  ],
+  "model": "sonnet",
   "hooks": {
     "PostToolUse": [
       {
@@ -55,6 +40,16 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/memory-hook.sh"
+          }
+        ]
+      }
+    ],
     "PostCompact": [
       {
         "hooks": [
@@ -65,5 +60,23 @@
         ]
       }
     ]
-  }
+  },
+  "enabledPlugins": {
+    "claude-mem@thedotmack": false,
+    "fakechat@claude-plugins-official": true,
+    "discord@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "thedotmack": {
+      "source": {
+        "source": "github",
+        "repo": "thedotmack/claude-mem"
+      }
+    }
+  },
+  "disabledMcpServers": [
+    "claude.ai Gmail",
+    "claude.ai Google Calendar"
+  ],
+  "skipDangerousModePermissionPrompt": true
 }
