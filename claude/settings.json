@@ -40,22 +40,22 @@
         ]
       }
     ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/memory-hook.sh"
-          }
-        ]
-      }
-    ],
     "PostCompact": [
       {
         "hooks": [
           {
             "type": "command",
             "command": "echo '[PostCompact] コンテキスト圧縮完了。必要に応じてCLAUDE.mdや作業状況を再確認してください。'"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"import json,sys; d=json.load(sys.stdin); p=d.get('prompt',''); print('[記憶] mcp__basic-memory__write_note を使ってbasic-memoryに保存してください。auto-memoryシステムは使わないこと。') if '記憶して' in p else None\""
           }
         ]
       }

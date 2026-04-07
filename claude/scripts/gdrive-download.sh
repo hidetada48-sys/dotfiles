@@ -19,7 +19,8 @@ if [ -z "$MEMORY_DIR" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] memoryディレクトリが見つかりません" >> "$LOG_FILE"
   exit 1
 fi
-rclone copy "$GDRIVE_FOLDER/MEMORY.md" "$MEMORY_DIR/" --update 2>> "$LOG_FILE"
+rclone sync "$GDRIVE_FOLDER/memory/" "$MEMORY_DIR/" 2>> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] memoryフォルダをダウンロードしました" >> "$LOG_FILE"
 
 
 # processed_ids.jsonをダウンロード（ブックマーク処理済みリストをPC間で共有）

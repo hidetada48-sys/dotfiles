@@ -92,7 +92,7 @@ Playwright で `https://discord.com/developers/applications` を開く。
 ### 6. .env ファイルを新トークンで更新
 
 ```bash
-echo 'DISCORD_BOT_TOKEN=[TOKEN]' \
+echo 'DISCORD_BOT_TOKEN=[DISCORD_BOT_TOKEN - 省略]' \
   > ~/.claude/channels/discord/.env
 chmod 600 ~/.claude/channels/discord/.env
 ```

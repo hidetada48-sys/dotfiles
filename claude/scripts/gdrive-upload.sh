@@ -13,11 +13,11 @@ fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] アップロード開始" >> "$LOG_FILE"
 
-# MEMORY.mdをアップロード（projectsディレクトリから動的にパスを取得）
-MEMORY_FILE=$(ls "$HOME/.claude/projects/"*/memory/MEMORY.md 2>/dev/null | head -1)
-if [ -f "$MEMORY_FILE" ]; then
-  rclone copy "$MEMORY_FILE" "$GDRIVE_FOLDER/" 2>> "$LOG_FILE"
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] MEMORY.mdをアップロードしました" >> "$LOG_FILE"
+# メモリフォルダごとアップロード（MEMORY.md + 個別メモリファイル全て）
+MEMORY_DIR=$(ls -d "$HOME/.claude/projects/"*/memory 2>/dev/null | head -1)
+if [ -d "$MEMORY_DIR" ]; then
+  rclone sync "$MEMORY_DIR" "$GDRIVE_FOLDER/memory/" 2>> "$LOG_FILE"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] memoryフォルダをアップロードしました" >> "$LOG_FILE"
 fi
 
 
