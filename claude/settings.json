@@ -29,6 +29,15 @@
             "command": "bash ~/.claude/scripts/post-tool-check.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__basic-memory__write_note",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/gdrive-upload.sh"
+          }
+        ]
       }
     ],
     "SessionStart": [
