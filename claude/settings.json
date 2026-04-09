@@ -85,6 +85,15 @@
       }
     }
   },
+  "mcpServers": {
+    "basic-memory": {
+      "command": "uvx",
+      "args": ["basic-memory", "mcp"],
+      "env": {
+        "BASIC_MEMORY_HOME": "C:/Users/miryo/basic-memory"
+      }
+    }
+  },
   "disabledMcpServers": [
     "claude.ai Gmail",
     "claude.ai Google Calendar"
