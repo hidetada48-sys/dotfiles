@@ -36,3 +36,37 @@ rclone sync "$GDRIVE_FOLDER/basic-memory/" "$BASIC_MEMORY_DIR" 2>> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] basic-memoryノートをダウンロードしました" >> "$LOG_FILE"
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] ダウンロード完了" >> "$LOG_FILE"
+
+# ツールのインストール確認（未インストールの場合に案内を表示）
+MISSING_TOOLS=()
+
+if ! command -v rtk &>/dev/null; then
+  MISSING_TOOLS+=("rtk")
+fi
+
+if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
+  echo ""
+  echo "================================================"
+  echo "  [セットアップ案内] 未インストールのツールがあります"
+  echo "================================================"
+  for tool in "${MISSING_TOOLS[@]}"; do
+    case "$tool" in
+      rtk)
+        echo ""
+        echo "▼ RTK（Rust Token Killer）- トークン使用量を60〜90%削減"
+        echo "  インストール手順："
+        echo "  1. Rustをインストール:"
+        echo "     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y"
+        echo "  2. RTKをビルド:"
+        echo "     source ~/.cargo/env"
+        echo "     cargo install --git https://github.com/rtk-ai/rtk"
+        echo "  3. Claude Code用にセットアップ:"
+        echo "     rtk init -g"
+        echo "  ※ aarch64 Linux の場合はバイナリが使えないためソースビルドが必要"
+        ;;
+    esac
+  done
+  echo ""
+  echo "================================================"
+  echo ""
+fi
