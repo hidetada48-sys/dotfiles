@@ -83,7 +83,7 @@
   },
   "enabledPlugins": {
     "claude-mem@thedotmack": false,
-    "fakechat@claude-plugins-official": true,
+    "fakechat@claude-plugins-official": false,
     "discord@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
