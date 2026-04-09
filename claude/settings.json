@@ -45,6 +45,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash ~/.claude/scripts/setup.sh"
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/scripts/gdrive-download.sh"
           }
         ]
