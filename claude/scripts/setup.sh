@@ -10,13 +10,39 @@ CLAUDE="$HOME/.claude"
 # シンボリックリンクの自動作成
 # ========================================
 
-# リンクを作成する関数（すでにあればスキップ）
+# リンクを作成する関数（OS別に対応）
 create_link() {
   local src="$1"
   local dst="$2"
-  if [ -e "$src" ] && [ ! -e "$dst" ] && [ ! -L "$dst" ]; then
-    ln -s "$src" "$dst"
+
+  # ソースが存在しない場合はスキップ
+  [ ! -e "$src" ] && return
+
+  # すでにリンク済みならスキップ
+  [ -L "$dst" ] && return
+
+  if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+    # Windows（Git Bash）の場合
+    # 実ディレクトリ・ファイルが邪魔していれば事前に削除
+    if [ -e "$dst" ]; then
+      rm -rf "$dst"
+      echo "[setup] 既存を削除: $dst"
+    fi
+
+    if [ -d "$src" ]; then
+      # ディレクトリ → ジャンクション（管理者権限不要）
+      cmd /c mklink /J "$(cygpath -w "$dst")" "$(cygpath -w "$src")" > /dev/null
+    else
+      # ファイル → ハードリンク（管理者権限不要）
+      cmd /c mklink /H "$(cygpath -w "$dst")" "$(cygpath -w "$src")" > /dev/null
+    fi
     echo "[setup] リンク作成: $dst"
+  else
+    # Linux / macOS の場合（従来通り）
+    if [ ! -e "$dst" ]; then
+      ln -s "$src" "$dst"
+      echo "[setup] リンク作成: $dst"
+    fi
   fi
 }
 
