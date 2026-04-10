@@ -31,10 +31,10 @@ create_link() {
 
     if [ -d "$src" ]; then
       # ディレクトリ → ジャンクション（管理者権限不要）
-      cmd /c mklink /J "$(cygpath -w "$dst")" "$(cygpath -w "$src")" > /dev/null
+      powershell.exe -Command "New-Item -ItemType Junction -Path '$(cygpath -w "$dst")' -Target '$(cygpath -w "$src")'" > /dev/null
     else
       # ファイル → ハードリンク（管理者権限不要）
-      cmd /c mklink /H "$(cygpath -w "$dst")" "$(cygpath -w "$src")" > /dev/null
+      powershell.exe -Command "New-Item -ItemType HardLink -Path '$(cygpath -w "$dst")' -Target '$(cygpath -w "$src")'" > /dev/null
     fi
     echo "[setup] リンク作成: $dst"
   else
