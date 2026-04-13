@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # rtk-hook-version: 3
 # RTK Claude Code hook — rewrites commands to use rtk for token savings.
+# REQUIRES: rtk jq
 # Requires: rtk >= 0.23.0, jq
 #
 # This is a thin delegating hook: all rewrite logic lives in `rtk rewrite`,

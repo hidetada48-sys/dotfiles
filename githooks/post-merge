@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# post-merge フック：git pull 後に自動実行
+# 新スキル・新設定が届いたときに環境を自動で揃える
+
+echo "[post-merge] dotfiles を更新しました。環境をセットアップします..."
+bash ~/dotfiles/claude/scripts/setup.sh

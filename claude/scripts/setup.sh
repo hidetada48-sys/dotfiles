@@ -1,7 +1,7 @@
 #!/bin/bash
 # 環境セットアップスクリプト
-# セッション開始時に自動実行される
-# 役割：シンボリックリンクの自動作成・必要ツールの自動インストール
+# セッション開始時・git pull 後に自動実行される
+# 役割：シンボリックリンクの自動作成・hooksPath設定・未インストールツールの通知
 
 DOTFILES="$HOME/dotfiles"
 CLAUDE="$HOME/.claude"
@@ -78,4 +78,63 @@ if [ -f "$SETTINGS" ]; then
     pip install "$STATUS_CMD" --quiet --break-system-packages 2>/dev/null \
       || pip install "$STATUS_CMD" --quiet 2>/dev/null
   fi
+fi
+
+# ========================================
+# git hooksPath の設定
+# ========================================
+
+# dotfilesリポジトリのgit pullで post-merge フックが走るよう設定
+if [ -d "$DOTFILES/.git" ]; then
+  git -C "$DOTFILES" config core.hooksPath "$DOTFILES/githooks"
+fi
+
+# ========================================
+# 未インストールツールの通知
+# ========================================
+
+MISSING=()
+
+# MCPサーバーの command を settings.json から読み取ってチェック
+if [ -f "$SETTINGS" ]; then
+  MCP_CMDS=$(python3 -c "
+import json
+try:
+    d = json.load(open('$SETTINGS'))
+    for v in d.get('mcpServers', {}).values():
+        cmd = v.get('command', '')
+        if cmd:
+            print(cmd)
+except:
+    pass
+" 2>/dev/null)
+  while IFS= read -r cmd; do
+    [ -z "$cmd" ] && continue
+    command -v "$cmd" &>/dev/null || MISSING+=("MCP コマンド: $cmd")
+  done <<< "$MCP_CMDS"
+fi
+
+# hookスクリプトの # REQUIRES: 宣言を走査してチェック
+for script in "$DOTFILES/claude/hooks"/*.sh "$DOTFILES/claude/scripts"/*.sh; do
+  [ -f "$script" ] || continue
+  while IFS= read -r line; do
+    # "# REQUIRES: tool1 tool2" 形式を解析
+    [[ "$line" =~ ^#\ REQUIRES:\ (.+)$ ]] || continue
+    for tool in ${BASH_REMATCH[1]}; do
+      command -v "$tool" &>/dev/null || MISSING+=("$(basename "$script"): $tool")
+    done
+  done < "$script"
+done
+
+# 未インストールがあれば通知
+if [ ${#MISSING[@]} -gt 0 ]; then
+  echo ""
+  echo "================================================"
+  echo "  [setup] 未インストールのツールがあります"
+  echo "================================================"
+  for item in "${MISSING[@]}"; do
+    echo "  ✗ $item"
+  done
+  echo "================================================"
+  echo ""
 fi
