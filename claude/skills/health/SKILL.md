@@ -1,6 +1,6 @@
 ---
 name: health
-description: Run when Claude feels off, ignores rules, or hooks/MCP need auditing.
+description: ユーザーが明示的に「設定を確認して」「healthチェックして」と依頼したときだけ使う。特定のスキルが発動しなかった原因調査など、動作の調査目的には使わない。
 ---
 
 # Claude Code Configuration Health Audit

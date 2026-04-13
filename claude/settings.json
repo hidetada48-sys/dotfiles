@@ -101,10 +101,7 @@
   "mcpServers": {
     "basic-memory": {
       "command": "uvx",
-      "args": ["basic-memory", "mcp"],
-      "env": {
-        "BASIC_MEMORY_HOME": "C:/Users/miryo/basic-memory"
-      }
+      "args": ["basic-memory", "mcp"]
     }
   },
   "disabledMcpServers": [

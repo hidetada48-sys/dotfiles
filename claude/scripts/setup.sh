@@ -66,21 +66,6 @@ for skill_dir in "$DOTFILES/claude/skills"/*/; do
 done
 
 # ========================================
-# 必要ツールの自動インストール
-# ========================================
-
-# settings.jsonのstatusLineコマンドを読み取って未インストールなら自動インストール
-SETTINGS="$CLAUDE/settings.json"
-if [ -f "$SETTINGS" ]; then
-  STATUS_CMD=$(python3 -c "import json; d=json.load(open('$SETTINGS')); print(d.get('statusLine', {}).get('command', ''))" 2>/dev/null)
-  if [ -n "$STATUS_CMD" ] && ! command -v "$STATUS_CMD" &>/dev/null; then
-    echo "[setup] $STATUS_CMD が未インストール → pip install $STATUS_CMD"
-    pip install "$STATUS_CMD" --quiet --break-system-packages 2>/dev/null \
-      || pip install "$STATUS_CMD" --quiet 2>/dev/null
-  fi
-fi
-
-# ========================================
 # git hooksPath の設定
 # ========================================
 
@@ -93,6 +78,7 @@ fi
 # 未インストールツールの通知
 # ========================================
 
+SETTINGS="$CLAUDE/settings.json"
 MISSING=()
 
 # MCPサーバーの command を settings.json から読み取ってチェック
