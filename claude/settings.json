@@ -10,17 +10,6 @@
   },
   "model": "sonnet",
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/rtk-rewrite.sh"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "hooks": [
@@ -101,7 +90,10 @@
   "mcpServers": {
     "basic-memory": {
       "command": "uvx",
-      "args": ["basic-memory", "mcp"]
+      "args": ["basic-memory", "mcp"],
+      "env": {
+        "BASIC_MEMORY_HOME": "C:/Users/miryo/basic-memory"
+      }
     }
   },
   "disabledMcpServers": [
