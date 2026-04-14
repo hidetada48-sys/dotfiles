@@ -31,7 +31,7 @@ fi
 # basic-memory ノートをアップロード（セマンティック検索の元データ）
 BASIC_MEMORY_DIR="$HOME/basic-memory"
 if [ -d "$BASIC_MEMORY_DIR" ]; then
-  rclone sync "$BASIC_MEMORY_DIR" "$GDRIVE_FOLDER/basic-memory/" 2>> "$LOG_FILE"
+  rclone copy "$BASIC_MEMORY_DIR" "$GDRIVE_FOLDER/basic-memory/" 2>> "$LOG_FILE"
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] basic-memoryノートをアップロードしました" >> "$LOG_FILE"
 fi
 
