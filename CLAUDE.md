@@ -46,3 +46,10 @@
   1. auto-memory: ~/.claude/projects/【現在のプロジェクトパス】/memory/MEMORY.md とその参照ファイル
   2. basic-memory: mcp__basic-memory__recent_activity および関連ノートを mcp__basic-memory__read_note で読む
 - キーワードの有無に関わらず、記憶に関わる質問には必ずこの手順を踏む
+
+## 記憶の扱いルール
+- 残課題・未対応（❌）が記憶に記録されていても、そのまま報告しない
+  必ず git log・ファイル・コードで現在の実態を確認してから結論を出す
+- タスク完了時は関連する auto-memory / basic-memory の未対応表記をその場で更新する
+  「作業したが記憶を直さなかった」は作業未完了と同じ
+- 作業中に記憶と実態の乖離を発見したら、ユーザーの指示を待たず即座に修正する
