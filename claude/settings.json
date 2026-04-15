@@ -85,6 +85,11 @@
       }
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": "ccsl",
+    "padding": 0
+  },
   "enabledPlugins": {
     "claude-mem@thedotmack": false,
     "fakechat@claude-plugins-official": false,
@@ -98,10 +103,14 @@
       }
     }
   },
+  "skipDangerousModePermissionPrompt": true,
   "mcpServers": {
     "basic-memory": {
       "command": "uvx",
-      "args": ["basic-memory", "mcp"]
+      "args": [
+        "basic-memory",
+        "mcp"
+      ]
     }
   },
   "disabledMcpServers": [
@@ -109,11 +118,5 @@
     "claude.ai Google Calendar"
   ],
   "effortLevel": "high",
-  "showThinkingSummaries": true,
-  "skipDangerousModePermissionPrompt": true,
-  "statusLine": {
-    "type": "command",
-    "command": "ccsl",
-    "padding": 0
-  }
+  "showThinkingSummaries": true
 }
