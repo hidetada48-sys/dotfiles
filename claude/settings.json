@@ -108,6 +108,8 @@
     "claude.ai Gmail",
     "claude.ai Google Calendar"
   ],
+  "effortLevel": "high",
+  "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
   "statusLine": {
     "type": "command",
