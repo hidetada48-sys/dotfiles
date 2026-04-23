@@ -111,6 +111,13 @@
         "basic-memory",
         "mcp"
       ]
+    },
+    "jina": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "jina-mcp-local"
+      ]
     }
   },
   "disabledMcpServers": [
