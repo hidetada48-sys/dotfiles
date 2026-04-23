@@ -42,6 +42,11 @@
 - git管理下の共有ファイルを変更する前に「もう一方のOSでも動くか」を確認する
   対象：settings.json / setup.sh / scripts/ / CLAUDE.md / githooks/
 
+## ウェブ検索ルール
+- ウェブ検索が必要なときは必ず `mcp__jina__search_web` を使う（WebSearchは使わない）
+- URLの内容を読むときは `mcp__jina__read_url` を使う（WebFetchは使わない）
+- Jinaが使えない場合（セッション開始直後など）はその旨をユーザーに伝えてから代替手段を確認する
+
 ## 記憶の参照ルール
 - 過去の作業・記憶・経緯について聞かれたら、必ず以下の両方を確認してから回答する
   1. auto-memory: ~/.claude/projects/【現在のプロジェクトパス】/memory/MEMORY.md とその参照ファイル
