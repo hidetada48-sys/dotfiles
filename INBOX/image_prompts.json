@@ -1,0 +1,8 @@
+[
+  {
+    "type": "thumbnail",
+    "description_ja": "超横長バナー再生成版",
+    "prompt_en": "Extremely wide horizontal banner with aspect ratio 2.5:1 (much wider than tall). Light gray-white gradient background. THREE distinct zones spread across the full width with large gaps between them: ZONE LEFT (far left 30% of canvas) - scattered fan of Twitter/X post cards and document cards, all white and blue colors only, no dark backgrounds, flat icon style. ZONE CENTER (middle 40% of canvas) - THREE LINES of very large bold Japanese black text stacked vertically centered: '1st line: ClaudeCodeのアプデを' '2nd line: Claudeがまとめて' '3rd line: 自分で実装した', below the text a curved blue arrow pointing right with gentle upward arc. ZONE RIGHT (far right 30% of canvas) - vertical stack of 3 rounded white cards each with blue checkmark: 'パフォーマンス改善' wrench icon, 'Hooksシステム' building icon, 'Plugin の投果' code icon, subtle 3D stack depth. All elements use maximum horizontal spread to fill the wide canvas. If any text appears use Japanese characters.",
+    "aspect_ratio": "2.5:1"
+  }
+]
