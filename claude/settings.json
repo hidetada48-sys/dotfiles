@@ -113,11 +113,8 @@
       ]
     },
     "jina": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "jina-mcp-local"
-      ],
+      "command": "/home/hidetada48/.npm-global/bin/jina-mcp-local",
+      "args": [],
       "env": {
         "JINA_API_KEY": "${JINA_API_KEY}"
       }
