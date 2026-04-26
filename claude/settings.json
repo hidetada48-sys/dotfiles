@@ -111,13 +111,6 @@
         "basic-memory",
         "mcp"
       ]
-    },
-    "jina": {
-      "command": "/home/hidetada48/.npm-global/bin/jina-mcp-local",
-      "args": [],
-      "env": {
-        "JINA_API_KEY": "${JINA_API_KEY}"
-      }
     }
   },
   "disabledMcpServers": [
