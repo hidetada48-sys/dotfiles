@@ -93,7 +93,8 @@
   "enabledPlugins": {
     "claude-mem@thedotmack": false,
     "fakechat@claude-plugins-official": false,
-    "discord@claude-plugins-official": true
+    "discord@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "thedotmack": {
@@ -103,6 +104,8 @@
       }
     }
   },
+  "effortLevel": "high",
+  "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
   "mcpServers": {
     "basic-memory": {
@@ -110,13 +113,12 @@
       "args": [
         "basic-memory",
         "mcp"
-      ]
+      ],
+      "alwaysLoad": true
     }
   },
   "disabledMcpServers": [
     "claude.ai Gmail",
     "claude.ai Google Calendar"
-  ],
-  "effortLevel": "high",
-  "showThinkingSummaries": true
+  ]
 }

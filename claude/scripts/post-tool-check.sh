@@ -1,5 +1,5 @@
 #!/bin/bash
-# PostToolUse Hook: .py・.jsonファイルの構文チェック
+# PostToolUse Hook: .py・.json・.shファイルの構文チェック
 # Edit/Write/MultiEdit実行後に自動発火する
 
 # stdinからツール情報（JSON）を読み込む
@@ -49,6 +49,16 @@ if [[ "$FILE_PATH" == *.json ]]; then
     if [ $? -ne 0 ]; then
         echo "[JSON構文エラー] $FILE_PATH"
         python3 -m json.tool "$FILE_PATH" 2>&1
+        exit 1
+    fi
+fi
+
+# .shファイル: Bash構文チェック
+if [[ "$FILE_PATH" == *.sh ]]; then
+    RESULT=$(bash -n "$FILE_PATH" 2>&1)
+    if [ $? -ne 0 ]; then
+        echo "[Bash構文エラー] $FILE_PATH"
+        echo "$RESULT"
         exit 1
     fi
 fi
