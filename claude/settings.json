@@ -19,6 +19,15 @@
             "command": "bash ~/.claude/hooks/rtk-rewrite.sh"
           }
         ]
+      },
+      {
+        "matcher": "WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'WebFetchは使用禁止。Jina MCPを使うこと（mcp__jina__read_url または mcp__jina__search_web）'; exit 2"
+          }
+        ]
       }
     ],
     "PostToolUse": [
