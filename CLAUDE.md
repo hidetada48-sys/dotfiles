@@ -48,17 +48,6 @@
 - URLの内容を読むときは `mcp__jina__read_url` を使う（WebFetchは使わない）
 - Jinaが使えない場合（セッション開始直後など）はその旨をユーザーに伝えてから代替手段を確認する
 
-## notebooklm調査ルール
-- 「notebooklmで調査する」と言われたら必ず `notebooklm-py` CLIを使う（Jina/WebSearchで代替しない）
-- ユーザーはクエリだけ渡す。ノートブック名・手順の確認は不要。Claudeが全て実行する
-- 手順：
-  1. `notebooklm create "調査テーマ名"` でノートブック作成
-  2. 返ってきたIDを使い、以下の3パターンで `source add-research -n [ID] "クエリ＋媒体名" --import-all` を実行
-     - `"クエリ note記事"`（note記事絞り込み）
-     - `"クエリ X投稿"`（X投稿絞り込み）
-     - `"クエリ"`（通常web）
-  3. 追加推奨クエリがあれば提案して追加する
-
 ## 記憶の参照ルール
 - 過去の作業・記憶・経緯について聞かれたら、必ず以下の両方を確認してから回答する
   1. auto-memory: ~/.claude/projects/【現在のプロジェクトパス】/memory/MEMORY.md とその参照ファイル
