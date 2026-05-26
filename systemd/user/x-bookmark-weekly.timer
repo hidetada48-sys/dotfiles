@@ -1,0 +1,10 @@
+[Unit]
+Description=Xブックマーク週次収集タイマー（毎週火曜 00:00 JST）
+
+[Timer]
+# 毎週火曜 00:00 JST（= 月曜 15:00 UTC）
+OnCalendar=Mon *-*-* 15:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

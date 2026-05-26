@@ -1,0 +1,17 @@
+[Unit]
+Description=Xブックマーク週次収集（v2）
+After=network.target
+StartLimitBurst=3
+StartLimitIntervalSec=3600
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/hidetada48/test2
+Environment=HOME=/home/hidetada48
+Environment=PATH=/home/hidetada48/.local/bin:/home/hidetada48/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+TimeoutStartSec=infinity
+Restart=on-failure
+RestartSec=600
+ExecStart=/home/hidetada48/.local/bin/claude --dangerously-skip-permissions -p "x-bookmark-weekly スキルを実行してください"
+StandardOutput=append:/home/hidetada48/test2/bookmarks/cron.log
+StandardError=append:/home/hidetada48/test2/bookmarks/cron.log
