@@ -116,6 +116,7 @@
   "effortLevel": "high",
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
+  "skipAutoPermissionPrompt": true,
   "mcpServers": {
     "basic-memory": {
       "command": "uvx",
