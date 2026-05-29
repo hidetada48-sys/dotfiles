@@ -50,7 +50,15 @@ python3 ~/dotfiles/claude/scripts/workbook_rotate.py <フォルダパス>
 **重要ルール**:
 - このスクリプトがEXIFタグを読んで機械的に回転する
 - Readツールで見える画像はEXIF補正済みのため、視覚で回転方向を判断してはいけない
-- スクリプトの結果を信頼する
+- スクリプト実行後、ユーザーに「回転結果を確認してください」と伝え、確認を得てから次へ進む
+
+**⚠️ EXIFが誤設定されている場合がある**:
+上下逆の場合: 該当ファイルに180°追加回転を適用して修正する。
+```python
+img = Image.open(path)
+img = img.rotate(180, expand=True)
+img.save(path, format='JPEG', quality=95)
+```
 
 ---
 
