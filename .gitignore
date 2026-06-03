@@ -3,3 +3,6 @@
 
 # Playwright MCPの自動生成ファイル（ログ・スクリーンショット）
 .playwright-mcp/
+
+# Pythonの自動生成キャッシュ
+__pycache__/
