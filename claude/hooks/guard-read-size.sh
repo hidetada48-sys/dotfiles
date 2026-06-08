@@ -1,17 +1,8 @@
 #!/usr/bin/env bash
-# guard-read-size.py を「実際に動くpython」で実行するラッパー
-# 理由: Windowsの python3 はMicrosoft Storeのスタブ（偽物）で動かない。
-#       Linuxでは python3 が本物のことが多い。両OS対応のため動く実体を探す。
+# guard-read-size.py を共通ラッパー(run-python.sh)経由で実行する。
+# run-python.sh が「動くpython」選択とUTF-8強制(PYTHONUTF8)を行うため、
+#   - Windowsのpython3スタブ問題を回避
+#   - ブロックメッセージの文字化けを防止（前回固まりの原因だった）
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# python3 → python → py の順で「実際に起動できる」ものを採用する。
-# Windowsのpython3スタブは -c "" が失敗するので自動的にスキップされる。
-for c in python3 python py; do
-  if command -v "$c" >/dev/null 2>&1 && "$c" -c "" >/dev/null 2>&1; then
-    # execでstdin（PreToolUseのJSON）をそのまま引き継いで実行する
-    exec "$c" "$DIR/guard-read-size.py"
-  fi
-done
-
-# 動くpythonが無ければ素通り（ガードを諦める＝誤爆防止）
-exit 0
+# execでstdin（PreToolUseのJSON）とexitコード(2=ブロック)をそのまま引き継ぐ
+exec bash "$DIR/run-python.sh" "$DIR/guard-read-size.py"

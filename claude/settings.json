@@ -96,7 +96,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import json,sys; d=json.load(sys.stdin); p=d.get('prompt',''); print('[記憶] mcp__basic-memory__write_note を使ってbasic-memoryに保存してください。auto-memoryシステムは使わないこと。') if '記憶して' in p else None\""
+            "command": "bash ~/.claude/hooks/run-python.sh ~/.claude/hooks/memo-reminder.py"
           }
         ]
       }
