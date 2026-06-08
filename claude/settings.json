@@ -27,6 +27,15 @@
             "command": "echo 'WebFetchは使用禁止。Jina MCPを使うこと（mcp__jina__read_url または mcp__jina__search_web）'; exit 2"
           }
         ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/guard-read-size.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
