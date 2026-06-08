@@ -8,6 +8,7 @@
     ],
     "defaultMode": "acceptEdits"
   },
+  "model": "sonnet[1m]",
   "hooks": {
     "PreToolUse": [
       {
@@ -121,7 +122,6 @@
       }
     }
   },
-  "model": "opus",
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
   "skipAutoPermissionPrompt": true,
