@@ -46,27 +46,17 @@ if [ -d "$SALES_PROJECT" ]; then
   rclone copy "$GDRIVE_FOLDER/sales-inbox/" "$SALES_INBOX/" --update 2>> "$LOG_FILE"
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] 売上仮置場(sales-inbox)をダウンロードしました" >> "$LOG_FILE"
 
-  # 未取込件数を数え、あれば標準出力に出す。
-  # 判定: inboxの生CSV {コード}_*.csv に対し、対応する台帳
-  #   sales/master/売上明細台帳_{コード}.csv が 無い／古い なら未取込（=新着）。
-  #   build_master.py が台帳を書き直すと台帳mtimeが最新化され、次回起動は新着0になる。
+  # 未取込チェックは中身判定（csv/xlsx両対応・ファイル名に依存しない）が必要なため Python に委譲する。
+  # bash では xlsx の中身を読めないので、得意先コードを中身から判定する check_inbox.py に任せる。
+  # 判定: inbox の各ファイルを中身判定し、得意先ごとに台帳(売上明細台帳_{コード}.csv)が
+  #   無い／古い なら未取込。build_master.py が台帳を書き直すと次回起動は新着0になる。
   # SessionStart フックの stdout は Claude のコンテキストに入る（公式仕様）ので、
   # 起動時に Claude が新着に気づき、専務へ「分析しますか？」と確認できる（工程4）。
-  MASTER_DIR="$SALES_PROJECT/sales/master"
-  new_count=0
-  shopt -s nullglob
-  for f in "$SALES_INBOX"/*.[cC][sS][vV]; do
-    fname=$(basename "$f")
-    code=$(echo "$fname" | grep -oE '^[0-9]{4}')   # 先頭4桁＝得意先コード
-    master="$MASTER_DIR/売上明細台帳_${code}.csv"
-    # -nt は「fが台帳より新しい」または「台帳が無い」とき真＝未取込
-    if [ "$f" -nt "$master" ]; then
-      new_count=$((new_count + 1))
-    fi
-  done
-  shopt -u nullglob
-  if [ "$new_count" -gt 0 ]; then
-    echo "📂 販売参謀: 未取込の売上明細が ${new_count} 件 sales/inbox にあります。専務に「DLされました、分析しますか？」と確認してください。"
+  PY=$(command -v python || command -v python3)
+  if [ -n "$PY" ]; then
+    ( cd "$SALES_PROJECT" && "$PY" sales/scripts/check_inbox.py )
+  else
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] python が見つからず未取込チェックをスキップ" >> "$LOG_FILE"
   fi
 fi
 
