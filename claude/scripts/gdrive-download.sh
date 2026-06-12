@@ -42,19 +42,25 @@ if [ -d "$SALES_PROJECT" ]; then
   SALES_INBOX="$SALES_PROJECT/sales/inbox"
   mkdir -p "$SALES_INBOX"
   # copy --update：追加DLのみ（gdrive側もローカル側も削除しない）。
-  # 二重取り込みは raw とのファイル名突き合わせで防ぐ（DL段階の重複は許容）。
+  # 二重取り込みは「台帳(master)より新しいか」で判定する（raw/は廃止＝横展開設計）。
   rclone copy "$GDRIVE_FOLDER/sales-inbox/" "$SALES_INBOX/" --update 2>> "$LOG_FILE"
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] 売上仮置場(sales-inbox)をダウンロードしました" >> "$LOG_FILE"
 
-  # 未取込（raw に同名が無い）件数を数え、あれば標準出力に出す。
+  # 未取込件数を数え、あれば標準出力に出す。
+  # 判定: inboxの生CSV {コード}_*.csv に対し、対応する台帳
+  #   sales/master/売上明細台帳_{コード}.csv が 無い／古い なら未取込（=新着）。
+  #   build_master.py が台帳を書き直すと台帳mtimeが最新化され、次回起動は新着0になる。
   # SessionStart フックの stdout は Claude のコンテキストに入る（公式仕様）ので、
   # 起動時に Claude が新着に気づき、専務へ「分析しますか？」と確認できる（工程4）。
-  RAW_DIR="$SALES_PROJECT/sales/raw"
+  MASTER_DIR="$SALES_PROJECT/sales/master"
   new_count=0
   shopt -s nullglob
   for f in "$SALES_INBOX"/*.[cC][sS][vV]; do
     fname=$(basename "$f")
-    if [ -z "$(find "$RAW_DIR" -name "$fname" 2>/dev/null | head -1)" ]; then
+    code=$(echo "$fname" | grep -oE '^[0-9]{4}')   # 先頭4桁＝得意先コード
+    master="$MASTER_DIR/売上明細台帳_${code}.csv"
+    # -nt は「fが台帳より新しい」または「台帳が無い」とき真＝未取込
+    if [ "$f" -nt "$master" ]; then
       new_count=$((new_count + 1))
     fi
   done
