@@ -1,4 +1,8 @@
 {
+  "env": {
+    "MCP_TIMEOUT": "60000",
+    "MCP_TOOL_TIMEOUT": "30000"
+  },
   "permissions": {
     "deny": [
       "Bash(rm -rf *)",
@@ -72,6 +76,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/scripts/basic-memory-resync.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/hr-leave-alert.sh"
           }
         ]
       }
@@ -129,10 +137,6 @@
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
   "skipAutoPermissionPrompt": true,
-  "env": {
-    "MCP_TIMEOUT": "60000",
-    "MCP_TOOL_TIMEOUT": "30000"
-  },
   "mcpServers": {
     "basic-memory": {
       "command": "uvx",
