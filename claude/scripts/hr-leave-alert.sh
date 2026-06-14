@@ -1,7 +1,7 @@
 #!/bin/bash
 # 有給 一斉付与アラート（SessionStart）
-# 役割：3/11以降そのサイクルで初回起動のときだけ、来たる4/11の付与日数を通知する。
-#       普段（通知済みサイクル・期日前）は何も出さずに終わる。
+# 役割：3/11以降、SUMMARYに未登録なら来たる4/11の付与日数をフル表示し、詳細を保存する。
+#       登録済み・クローズ済み（hr/SUMMARY.md の 有給:一斉付与/年）なら何も出さない。
 # REQUIRES: python3
 
 PROJECT="$HOME/mino-sakura-hq"
@@ -19,6 +19,6 @@ esac
 # python3 が無い環境（未インストール等）はスキップ
 command -v python3 >/dev/null 2>&1 || exit 0
 
-# 台帳パスが相対参照のためプロジェクト直下で実行する
+# 台帳パスが相対参照のためプロジェクト直下で実行する。日本時間で判定する
 cd "$PROJECT" || exit 0
-python3 "$SCRIPT"
+TZ=Asia/Tokyo python3 "$SCRIPT"
