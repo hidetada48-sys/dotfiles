@@ -107,7 +107,20 @@ for script in "$DOTFILES/claude/hooks"/*.sh "$DOTFILES/claude/scripts"/*.sh; do
     # "# REQUIRES: tool1 tool2" 形式を解析
     [[ "$line" =~ ^#\ REQUIRES:\ (.+)$ ]] || continue
     for tool in ${BASH_REMATCH[1]}; do
-      command -v "$tool" &>/dev/null || MISSING+=("$(basename "$script"): $tool")
+      case "$tool" in
+        python3|python|py)
+          # pythonは名前がOSで違う（Linux=python3 / Windows=python・py）。
+          # 実際に起動できる実体があれば満たすとみなす（MS Storeスタブは -c "" が失敗して弾かれる）。
+          _py_ok=0
+          for c in python3 python py; do
+            if command -v "$c" >/dev/null 2>&1 && "$c" -c "" >/dev/null 2>&1; then _py_ok=1; break; fi
+          done
+          [ "$_py_ok" = 1 ] || MISSING+=("$(basename "$script"): python(python3/python/py のいずれか)")
+          ;;
+        *)
+          command -v "$tool" &>/dev/null || MISSING+=("$(basename "$script"): $tool")
+          ;;
+      esac
     done
   done < "$script"
 done

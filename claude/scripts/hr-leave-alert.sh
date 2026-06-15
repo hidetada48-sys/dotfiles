@@ -16,9 +16,16 @@ esac
 # スクリプトが無ければスキップ
 [ -f "$SCRIPT" ] || exit 0
 
-# python3 が無い環境（未インストール等）はスキップ
-command -v python3 >/dev/null 2>&1 || exit 0
+# 動くpythonを探す（python3→python→py）。WindowsのMS Storeスタブは -c "" が失敗するので弾く。
+# UTF-8強制でWindowsのcp932による日本語取りこぼしを防ぐ（Linuxでは無害）。
+export PYTHONUTF8=1
+PY=""
+for c in python3 python py; do
+  if command -v "$c" >/dev/null 2>&1 && "$c" -c "" >/dev/null 2>&1; then PY="$c"; break; fi
+done
+# 動くpythonが無ければスキップ（誤爆防止）
+[ -n "$PY" ] || exit 0
 
 # 台帳パスが相対参照のためプロジェクト直下で実行する。日本時間で判定する
 cd "$PROJECT" || exit 0
-TZ=Asia/Tokyo python3 "$SCRIPT"
+TZ=Asia/Tokyo "$PY" "$SCRIPT"
