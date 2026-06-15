@@ -84,6 +84,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/scripts/hr-annual-event-alert.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/hr-law-watch-alert.sh"
           }
         ]
       }
