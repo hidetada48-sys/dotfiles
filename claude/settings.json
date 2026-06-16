@@ -88,6 +88,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/scripts/hr-law-watch-alert.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/weekly-startup-check.sh"
           }
         ]
       }
