@@ -83,7 +83,12 @@ MISSING=()
 
 # MCPサーバーの command を settings.json から読み取ってチェック
 if [ -f "$SETTINGS" ]; then
-  MCP_CMDS=$(python3 -c "
+  # python3→python→py の順でフォールバック（Linux=python3 / Windows=python）
+  _PY=""
+  for _c in python3 python py; do
+    if command -v "$_c" >/dev/null 2>&1 && "$_c" -c "" >/dev/null 2>&1; then _PY="$_c"; break; fi
+  done
+  MCP_CMDS=$([ -n "$_PY" ] && "$_PY" -c "
 import json
 try:
     d = json.load(open('$SETTINGS'))
