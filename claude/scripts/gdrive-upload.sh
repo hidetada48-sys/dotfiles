@@ -54,35 +54,46 @@ fi
   # ハング防止＆高速化フラグ（接続10秒・通信30秒で打ち切り、並列・リトライ最小）
   RFLAGS="--contimeout=10s --timeout=30s --retries=1 --low-level-retries=2 --transfers=8 --checkers=8"
 
+  # rclone を実行し、成否をログに「正直に」記録する（失敗を「成功」と書かない）。
+  # 旧版は exit code を見ずに必ず「アップロードしました」と書いていたため、
+  # 機密データの同期が失敗しても気づけなかった（2026-06-18 改修）。
+  # 使い方: run_rclone "ラベル" sync $RFLAGS 送信元 送信先
+  run_rclone() {
+    local label="$1"; shift
+    rclone "$@" 2>> "$LOG_FILE"
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] ${label}をアップロードしました" >> "$LOG_FILE"
+    else
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] ★失敗: ${label} のアップロードに失敗しました (rclone rc=$rc)" >> "$LOG_FILE"
+    fi
+  }
+
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] アップロード開始(背景)" >> "$LOG_FILE"
 
   # メモリフォルダごとアップロード（MEMORY.md + 個別メモリファイル全て）
   MEMORY_DIR=$(ls -d "$HOME/.claude/projects/"*/memory 2>/dev/null | head -1)
   if [ -d "$MEMORY_DIR" ]; then
-    rclone sync $RFLAGS "$MEMORY_DIR" "$GDRIVE_FOLDER/memory/" 2>> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] memoryフォルダをアップロードしました" >> "$LOG_FILE"
+    run_rclone "memoryフォルダ" sync $RFLAGS "$MEMORY_DIR" "$GDRIVE_FOLDER/memory/"
   fi
 
   # processed_ids.json をアップロード（ブックマーク処理済みリストをPC間で共有）
   PROCESSED_IDS_FILE="$HOME/.x-bookmark-sync/processed_ids.json"
   if [ -f "$PROCESSED_IDS_FILE" ]; then
-    rclone copy $RFLAGS "$PROCESSED_IDS_FILE" "$GDRIVE_FOLDER/" 2>> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] processed_ids.jsonをアップロードしました" >> "$LOG_FILE"
+    run_rclone "processed_ids.json" copy $RFLAGS "$PROCESSED_IDS_FILE" "$GDRIVE_FOLDER/"
   fi
 
   # basic-memory ノートをアップロード（セマンティック検索の元データ）
   BASIC_MEMORY_DIR="$HOME/basic-memory"
   if [ -d "$BASIC_MEMORY_DIR" ]; then
-    rclone copy $RFLAGS "$BASIC_MEMORY_DIR" "$GDRIVE_FOLDER/basic-memory/" 2>> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] basic-memoryノートをアップロードしました" >> "$LOG_FILE"
+    run_rclone "basic-memoryノート" copy $RFLAGS "$BASIC_MEMORY_DIR" "$GDRIVE_FOLDER/basic-memory/"
   fi
 
   # 機密ファイル（secrets/hr/）をアップロード（社員台帳・有給付与一覧など）
   SALES_PROJECT="$HOME/mino-sakura-hq"
   SECRETS_HR="$SALES_PROJECT/secrets/hr"
   if [ -d "$SECRETS_HR" ]; then
-    rclone sync $RFLAGS "$SECRETS_HR/" "$GDRIVE_FOLDER/secrets-hr/" 2>> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] secrets/hr をアップロードしました" >> "$LOG_FILE"
+    run_rclone "secrets/hr（機密）" sync $RFLAGS "$SECRETS_HR/" "$GDRIVE_FOLDER/secrets-hr/"
   fi
 
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] アップロード完了(背景)" >> "$LOG_FILE"
