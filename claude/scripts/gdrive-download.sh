@@ -58,6 +58,12 @@ if [ -d "$SALES_PROJECT" ]; then
   else
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] python が見つからず未取込チェックをスキップ" >> "$LOG_FILE"
   fi
+
+  # 機密ファイル（secrets/hr/）をダウンロード（社員台帳・有給付与一覧など）
+  SECRETS_HR="$SALES_PROJECT/secrets/hr"
+  mkdir -p "$SECRETS_HR"
+  rclone sync "$GDRIVE_FOLDER/secrets-hr/" "$SECRETS_HR/" 2>> "$LOG_FILE"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] secrets/hr をダウンロードしました" >> "$LOG_FILE"
 fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] ダウンロード完了" >> "$LOG_FILE"

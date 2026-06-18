@@ -77,6 +77,14 @@ fi
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] basic-memoryノートをアップロードしました" >> "$LOG_FILE"
   fi
 
+  # 機密ファイル（secrets/hr/）をアップロード（社員台帳・有給付与一覧など）
+  SALES_PROJECT="$HOME/mino-sakura-hq"
+  SECRETS_HR="$SALES_PROJECT/secrets/hr"
+  if [ -d "$SECRETS_HR" ]; then
+    rclone sync $RFLAGS "$SECRETS_HR/" "$GDRIVE_FOLDER/secrets-hr/" 2>> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] secrets/hr をアップロードしました" >> "$LOG_FILE"
+  fi
+
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] アップロード完了(背景)" >> "$LOG_FILE"
 ) >/dev/null 2>&1 &
 
