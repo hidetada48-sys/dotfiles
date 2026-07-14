@@ -170,5 +170,6 @@
   "disabledMcpServers": [
     "claude.ai Gmail",
     "claude.ai Google Calendar"
-  ]
+  ],
+  "model": "opus"
 }
