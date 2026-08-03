@@ -20,15 +20,21 @@ cd "$PROJECT" || exit 0
 # --- 対象月の算出（日本時間・20日締め） ---
 # 日が21以上 → 今月20日で締まった＝対象月は今月
 # 日が20以下 → まだ今月20日前＝直近で締まったのは先月20日＝対象月は先月
-TODAY=$(TZ=Asia/Tokyo date +%Y-%m-%d)
-DAY=$(TZ=Asia/Tokyo date +%d)
-THIS_MONTH=$(TZ=Asia/Tokyo date +%Y-%m)
+# ★ TZ=Asia/Tokyo は使わない（2026-08-03 に判明した不具合）。
+#    Windows の git-bash(MSYS) には tzdata が無く TZ=Asia/Tokyo が黙って UTC に落ちるため、
+#    日本時間の朝9時前は常に「前日」と判定される（＝21日の朝に締めを取りこぼす）。
+#    UTC に +9時間して明示的に JST を作る（tzdata 非依存・Linux/Windows 共通）。
+TODAY=$(date -u -d '+9 hours' +%Y-%m-%d 2>/dev/null)
+DAY=$(date -u -d '+9 hours' +%d 2>/dev/null)
+THIS_MONTH=$(date -u -d '+9 hours' +%Y-%m 2>/dev/null)
+
+[ -n "$DAY" ] && [ -n "$THIS_MONTH" ] || exit 0
 
 if [ "$((10#$DAY))" -ge 21 ]; then
   TARGET="$THIS_MONTH"
 else
   # 先月 = 今月1日の前日の年月
-  TARGET=$(TZ=Asia/Tokyo date -d "${THIS_MONTH}-01 -1 day" +%Y-%m 2>/dev/null)
+  TARGET=$(date -u -d "${THIS_MONTH}-01 -1 day" +%Y-%m 2>/dev/null)
 fi
 
 # date -d が使えない環境では誤検知を避けて黙って降りる

@@ -27,5 +27,7 @@ done
 # 動くpythonが無ければスキップ（誤爆防止）
 [ -n "$PY" ] || exit 0
 
-# 日本時間で判定する
-TZ=Asia/Tokyo "$PY" "$SCRIPT"
+# 日本時間の判定はスクリプト側で明示的に行う（JST=UTC+9 をpython内で固定）。
+# ※ TZ=Asia/Tokyo は付けない：git-bash(MSYS) に tzdata が無く UTC に落ちるため
+#    「効いているつもりで前日になる」不具合の温床になる（2026-08-03 判明）。
+"$PY" "$SCRIPT"
