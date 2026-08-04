@@ -59,6 +59,15 @@ if [ -d "$SALES_PROJECT" ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] python が見つからず未取込チェックをスキップ" >> "$LOG_FILE"
   fi
 
+  # 生産系データ（薬品台帳・電気代・抄き上げ重量表・原料日誌）の仮置場をダウンロード
+  # 専務がドライブの production-inbox に置いたファイルを受ける。
+  # 原本(production/data/)へは直接落とさない：2026-07-10 に単価表が原料日誌807行を
+  # 丸ごと上書きした事故があったため、いったん inbox で受けて Claude が突合してから更新する。
+  PROD_INBOX="$SALES_PROJECT/production/inbox"
+  mkdir -p "$PROD_INBOX"
+  rclone copy "$GDRIVE_FOLDER/production-inbox/" "$PROD_INBOX/" --update 2>> "$LOG_FILE"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] 生産データ仮置場(production-inbox)をダウンロードしました" >> "$LOG_FILE"
+
   # 機密ファイル（secrets/hr/）をダウンロード（社員台帳・有給付与一覧など）
   SECRETS_HR="$SALES_PROJECT/secrets/hr"
   mkdir -p "$SECRETS_HR"
