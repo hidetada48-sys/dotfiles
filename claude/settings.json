@@ -12,6 +12,7 @@
     ],
     "defaultMode": "acceptEdits"
   },
+  "model": "opus",
   "hooks": {
     "PreToolUse": [
       {
@@ -170,6 +171,5 @@
   "disabledMcpServers": [
     "claude.ai Gmail",
     "claude.ai Google Calendar"
-  ],
-  "model": "opus"
+  ]
 }
