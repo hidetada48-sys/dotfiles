@@ -451,6 +451,7 @@ HTML と同時に、作成した問題の記録を JSON ファイルとして出
   "subject": "教科名",
   "unit": "単元名（例: Unit1-2）",
   "difficulty": { "類似": 0, "関連": 1 },
+  "test_range": ["p.12-13", "p.14-15", "..."],
   "pages_scanned": ["p.12-13", "p.14-15", "..."],
   "visual_emphasis": [
     {
@@ -480,6 +481,21 @@ HTML と同時に、作成した問題の記録を JSON ファイルとして出
 
 ※ `visual_emphasis` は mock-test-generator が画像なしでコア項目を特定するために使う。
 　 教科・出版社によって強調の形式が異なるため、テキスト固有の構造に合わせて柔軟に記録する。
+
+※ `test_range` は**次のテストの出題範囲**（見開き単位）。`pages_scanned` は**実際に読んだページ**。
+　 この2つは別物で、範囲の一部しか読んでいなければ `test_range` のほうが多くなる。
+　 範囲から外すと決めたページは `visual_emphasis` の側に `"out_of_range": true` を付ける。
+
+### 書いたら必ず通す（省略禁止）
+
+```bash
+python ~/.claude/skills/quiz-generator/references/check_coverage.py <log.json>
+```
+
+`test_range` の各ページが `pages_scanned` と `visual_emphasis` の両方に載っているかを1ページずつ照合する。
+**`[NG]` が出たら、不足ページの写真を求めてJSONを作り直す。** そのまま模試に渡してはならない。
+`pages_scanned` と `visual_emphasis` の件数が一致していても、読んだページ数自体が足りなければ
+このチェックでしか見つからない（2026-08-08 に7枚渡されて2見開きしか読まなかった件）。
 
 ### wrong_count の設計思想
 

@@ -65,11 +65,27 @@ quiz-generatorのJSONに`visual_emphasis`が含まれている場合は**画像�
 | JSONにないが画像がある | 画像から直接読み取る（教科・出版社固有の強調表現に注目） |
 | 両方ある | JSONを優先し、画像で補完する |
 
-**渡されたJSONが出題範囲を覆っているかを最初に確かめる（必須）。**
-`pages_scanned` を出題範囲と突き合わせ、**足りなければそこで止めて不足ページを求める**。
-JSONの中で数が揃っていても、読まれたページ数自体が足りないことがある
-（2026-08-08 に、7枚の範囲に対して2見開き分しか入っていないJSONが作られた）。
-**間違い記録は3軸のうちの1つにすぎない。模擬テストは出題範囲全体から作る。**
+### ★最初にやること：カバレッジ検査（省略禁止・目視で代用しない）
+
+**模擬テストは出題範囲全体から作る。間違い記録は3軸のうちの1つにすぎない。**
+その大前提は「渡されたJSONが範囲全体を覆っていること」なので、**何よりも先に機械で確かめる。**
+
+```bash
+python ~/.claude/skills/quiz-generator/references/check_coverage.py <log.json>
+# 範囲がJSONに書かれていないときだけ
+python ~/.claude/skills/quiz-generator/references/check_coverage.py <log.json> --range p.18-19,p.20-21
+```
+
+| 結果 | やること |
+|------|---------|
+| `[NG]` | **そこで止める。** 不足ページを画面に出して写真を求め、quiz-generator でJSONを作り直す |
+| `[要確認]` | 挙げられたページの写真を開き直し、読み落としが無いか確かめてから進む |
+| `[OK]` | 次へ進む |
+
+**このコマンドを実行せずにステップ2の先へ進んではならない。**
+自分の目で数えて足りていると判断するのも不可（数が揃っていると通ってしまうため。
+2026-08-08 に、7枚の範囲に対して2見開き分しか入っていないJSONで模試を作りかけた）。
+配点の `assert`・`check_leak.py` と並ぶ、3つ目の機械の関門である。
 
 **【必須手順】JSONに`visual_emphasis`がある場合：**
 1. 全ページの`emphasis_points`と`key_sentences`を**ページ順に全件列挙**する
@@ -535,5 +551,9 @@ answer-validator で再検証することを推奨します。
 
 ## 参考ファイル
 
+- `~/.claude/skills/quiz-generator/references/check_coverage.py` — **材料の関門**。
+  log.json が出題範囲を覆っているかを検査する。**ステップ2の最初に必ず通す**
 - `~/.claude/skills/quiz-generator/references/html-template.md` — **体裁の正典**。
   骨組み・CSS・部品の使い分け。**HTML生成前に必ず読む**（quiz-generator と共通の1本を使う）
+- `~/.claude/skills/quiz-generator/references/check_leak.py` — **答えの漏れの関門**。
+  生成後に必ず通し、0件でなければ提示しない
