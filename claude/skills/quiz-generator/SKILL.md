@@ -472,6 +472,24 @@ python ~/.claude/skills/quiz-generator/references/check_leak.py <出力HTML>
 **必ず巻末（解答一覧・解説）まで見ること**。
 本文だけ見て提示すると、解説に混じった `**` などの記法ミスを見落とす。
 
+**④ つまずきの反映を機械で調べる（必須・省略禁止／2026-08-11）。**
+
+```bash
+python ~/.claude/skills/quiz-generator/references/check_pitfalls.py <出力HTML> <log.json>
+```
+
+**ステップ4の「つまずき駆動」を飛ばせないための機械の関門。** 教科で分岐する：
+- **その他教科**＝各「関連」に `pitfall`（狙うつまずき）タグが要る。
+- **数学**＝各「類似2」「類似3」に `pitfall` が要り、かつ `key_point` が土台（類似1）と別なこと
+  （同一なら「問い方替え」＝失敗）。
+- どちらも**巻末②の解説に「▶よくある誤り」が、罠を狙う問題の数だけ**必要。
+- 罠が当てはまらない問（純粋な知識確認）は `pitfall` に `"なし（知識確認）"` と**明示**する
+  （キーごと省くのは不可＝黙って飛ばさない）。
+
+**1件でも [NG] が出たら提示・配布してはならない。** JSON と HTML を直して0件にする。
+なお**下記ステップ7の配布スクリプト（publish_to_drive.sh）は内部で run_checks.sh を先に通す**ので、
+① 漏れ ② 全範囲カバレッジ ④ つまずき が揃っていないと **そもそもDriveへ上げられない**。
+
 印刷が必要なときはブラウザの「印刷 → PDFに保存」を使う。A4用のCSSはテンプレートに入っている。
 
 ### 解答・解説の構成
@@ -533,11 +551,15 @@ HTML と同時に、作成した問題の記録を JSON ファイルとして出
       "question_summary": "問題文の要約（30字程度）",
       "key_point": "問われているスキル・文法事項",
       "answer": "答え",
-      "wrong_count": 1
+      "wrong_count": 1,
+      "pitfall": "狙うつまずき（例: P4 分配の符号／B1 見た目分類）。無ければ \"なし（知識確認）\""
     }
   ]
 }
 ```
+
+※ `pitfall` は**関連（数学は類似2・類似3）に必須**（2026-08-11）。ステップ4の
+　 つまずき駆動を機械で担保する `check_pitfalls.py` がこの欄を見る。空欄・キー無しは配布不可。
 
 ※ `visual_emphasis` は mock-test-generator が画像なしでコア項目を特定するために使う。
 　 教科・出版社によって強調の形式が異なるため、テキスト固有の構造に合わせて柔軟に記録する。
@@ -713,3 +735,7 @@ JSON を受け取ったら、問題生成の前に以下を必ず聞く。
 - `~/.claude/skills/quiz-generator/references/prep_images.py` — 写真の向き決め・分割・圧縮（ステップ0）
 - `~/.claude/skills/quiz-generator/references/find_redmarks.py` — 赤い印の候補絞り込み（ステップ1-B）
 - `~/.claude/skills/quiz-generator/references/check_leak.py` — **答えの漏れ検査**（ステップ5・必須）
+- `~/.claude/skills/quiz-generator/references/check_coverage.py` — **材料が全範囲を覆うかの検査**（模試の前・空ページはNG）
+- `~/.claude/skills/quiz-generator/references/check_pitfalls.py` — **つまずき反映の検査**（関連/類似2-3のpitfall＋巻末▶。数学/その他で分岐・必須）
+- `~/.claude/skills/quiz-generator/references/run_checks.sh` — 上記3関門をまとめて通すランナー（`<html> [log.json [range]]`）
+- `~/.claude/skills/quiz-generator/references/publish_to_drive.sh` — **配布の関門**。内部で run_checks を先に通し、①漏れ②カバレッジ④つまずきが揃わないとDriveへ上げない

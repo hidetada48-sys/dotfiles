@@ -32,6 +32,25 @@ if [ ! -f "$HTML" ]; then
 fi
 command -v rclone >/dev/null 2>&1 || { echo "[NG] rclone が無い。Driveへ上げられない"; exit 3; }
 
+# --- 0) 機械の関門を先に通す（2026-08-11 追加）---
+#   カバレッジ（全範囲読了）・答え漏れ・つまずき の3関門を run_checks.sh でまとめて通す。
+#   extra に .json（log.json / 出題履歴.json）があれば渡す＝カバレッジとつまずきも検査される。
+#   ここで非ゼロなら set -e により配布を中止＝サボると配布で止まる。
+REF="$(cd "$(dirname "$0")" && pwd)"
+LOG_JSON=""
+for f in "${EXTRAS[@]}"; do
+  case "$f" in *.json) LOG_JSON="$f"; break;; esac
+done
+echo "▼ 配布前の機械の関門（run_checks.sh）"
+if [ -n "$LOG_JSON" ]; then
+  bash "$REF/run_checks.sh" "$HTML" "$LOG_JSON"
+else
+  echo "  ※ .json（log/出題履歴）が渡されていない＝カバレッジ・つまずき検査は省略。"
+  echo "    問題集・模試は必ず log を一緒に渡すこと（漏れ検査だけでは①②を担保できない）。"
+  bash "$REF/run_checks.sh" "$HTML"
+fi
+echo ""
+
 # --- 1) headless Chrome を探す（両OS対応。無ければ止める＝PDFを黙って飛ばさない）---
 find_chrome() {
   # 環境変数 CHROME で明示指定を最優先

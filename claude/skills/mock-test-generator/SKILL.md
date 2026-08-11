@@ -450,14 +450,27 @@ import math
 
 ### 生成後の検査（必須・省略禁止）
 
-**① 機械の関門をランナーでまとめて通す（2026-08-09）。**
+**① 機械の関門を通す（模試は「材料」と「出力」で2回に分ける・2026-08-11）。**
+
+模試は材料（quiz の log.json）と出力（出題履歴JSON）で見る対象が違うので、関門を分けて通す：
 
 ```bash
-bash ~/.claude/skills/quiz-generator/references/run_checks.sh <出力HTML> [log.json [range]]
+# ②全範囲：生成前に、材料の quiz log.json（visual_emphasis入り）へカバレッジを通す
+python ~/.claude/skills/quiz-generator/references/check_coverage.py <quiz_log.json>
+
+# ①漏れ ④つまずき：生成後に、出力HTML＋出題履歴JSON へランナーを通す
+bash ~/.claude/skills/quiz-generator/references/run_checks.sh <出力HTML> <出題履歴JSON>
 ```
 
-- 中で `check_coverage.py`（log.jsonを渡した場合）→ `check_leak.py` を順に実行し、
-  失敗した時点で止まる（＝ハード関門。次へ進めない）。
+- `run_checks.sh` は中で `check_coverage.py`（出題履歴JSONは自動スキップ）→ `check_leak.py`
+  → **`check_pitfalls.py`** を順に実行し、失敗した時点で止まる（＝ハード関門）。
+- `check_pitfalls.py` は出題履歴JSONの**各コア項目に `pitfall` があるか**、巻末に
+  「▶よくある誤り」が**罠の数だけ**あるかを見る。**pitfall欠落は配布不可**（罠が無い問は
+  `"なし（知識確認）"` と明示。キーごと省くのは不可）。
+- `check_coverage.py` は**各ページの visual_emphasis が空ならNG**（＝pages_scanned に名前を
+  並べただけの「読んでいない範囲」を通さない。②全範囲読了の機械的担保）。**生成前に必ず通す。**
+- 配布 `publish_to_drive.sh` は内部で `run_checks.sh` を先に通す（出題履歴JSONを渡す）ので、
+  ①漏れ④つまずきが揃わないと**そもそもDriveへ上げられない**。②は上の生成前カバレッジで担保。
 - `check_leak.py` は **見出し(h2)への漏れがあれば終了コード非ゼロ＝停止**。
   **設問文への語句一致は「注意（⚠）」表示**で止めない（同じ語が選択肢・文脈で頻出し、
   一律ブロックすると誤検知が多いため）。**⚠は1件ずつ目視し、本当に別の設問の答えを
@@ -517,11 +530,16 @@ HTMLと同じフォルダに出力する（`json.dump(..., ensure_ascii=False, i
       "mondai_id": "大問1-(1)",
       "core_item": "コア項目名",
       "format": "選択 / 穴埋め / 記述 / 表 / 図表読み取り など",
-      "difficulty": 0
+      "difficulty": 0,
+      "pitfall": "狙うつまずき（常設カタログ記号＋単元固有）。無ければ \"なし（知識確認）\""
     }
   ]
 }
 ```
+
+※ `pitfall` は**全コア項目に必須**（2026-08-11）。ステップ2④の「つまずきを重ねて出題」を
+　 機械で担保する `check_pitfalls.py` がこの欄を見る。**キーごと省くのは不可**＝罠が無い問は
+　 `"なし（知識確認）"` と明示する。罠を狙う問は**巻末（解説）に「▶よくある誤り」を1行**書くこと。
 
 ### 出力後の案内
 

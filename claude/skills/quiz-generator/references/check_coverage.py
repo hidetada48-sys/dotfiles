@@ -39,6 +39,14 @@ def load_range(log, argv):
 
 def check(path, argv):
     log = json.load(open(path, encoding='utf-8'))
+    # 模試の出題履歴JSON（questions[]・範囲情報なし）はカバレッジ対象外＝スキップ。
+    # ＝run_checks.sh に出題履歴JSONを渡しても誤ってNGにしない（つまずき検査だけ効かせる）。
+    # 模試の材料カバレッジは quiz の log.json（visual_emphasis入り）に対して別途通すこと。
+    if 'questions' in log and 'visual_emphasis' not in log and 'test_range' not in log \
+            and '--range' not in argv:
+        print('[skip] これは模試の出題履歴JSON＝カバレッジ検査の対象外。'
+              '材料カバレッジは quiz の log.json（visual_emphasis入り）に通すこと。')
+        return 0
     rng, src = load_range(log, argv)
     if rng is None:
         print('[NG] 出題範囲が分かりません。')
@@ -75,6 +83,13 @@ def check(path, argv):
             continue
         n = len(ve[p].get('emphasis_points') or [])
         k = len(ve[p].get('key_sentences') or [])
+        # ★空ページはハード[NG]（2026-08-11 強化）。pages_scanned/visual_emphasis に
+        #   ページ名を並べただけで中身が無い＝実際に読んでいない状態を通さない。
+        if n == 0 and k == 0:
+            ng += 1
+            print(f'[不足] {p} … visual_emphasis が空（強調0件・見出し0件）'
+                  '＝そのページを読んでいない疑い。写真を開いて中身を埋めること')
+            continue
         mark = ''
         if n < floor:
             thin.append(p)
