@@ -563,6 +563,17 @@ HTMLと同じフォルダに出力する（`json.dump(..., ensure_ascii=False, i
 　 機械で担保する `check_pitfalls.py` がこの欄を見る。**キーごと省くのは不可**＝罠が無い問は
 　 `"なし（知識確認）"` と明示する。罠を狙う問は**巻末（解説）に「▶よくある誤り」を1行**書くこと。
 
+### 設計ブリーフの反映（本番の分析を引き継ぐ模試のみ・2026-08-13）
+過去の本番テストを分析して作った**教科ごとの設計ブリーフ**（例 `holiday/期末模試_設計ブリーフ/{教科}.md`）がある教科の模試は、
+その方針を反映して作り、**出題履歴JSONに次の2つを必ず入れる**（＝反映したことの機械的な宣言）：
+```json
+  "design_brief_required": true,
+  "design_brief_sha256": "<ブリーフの sha256（sha256sum で取得）>"
+```
+配信時は `DESIGN_BRIEF=<ブリーフのパス>` を付けて publish する（ステップ9）。
+`check_calibration.py` が sha256 の一致を照合し、**未反映・不一致なら配信を拒否**する
+（記憶に頼って方針を保持→飛ばす、を封じる恒久ゲート。ブリーフが無い教科・類題集・業務成果物は素通り）。
+
 ### 出力後の案内
 
 JSONファイル出力後、チャットに以下を表示する。
@@ -583,6 +594,11 @@ JSONファイル出力後、チャットに以下を表示する。
   ```bash
   bash ~/.claude/skills/quiz-generator/references/publish_to_drive.sh <出力HTML> "<Drive教材フォルダ>" <出題履歴JSON>
   ```
+  - **設計ブリーフのある教科の模試**（`design_brief_required:true`）は、必ず `DESIGN_BRIEF` を付ける：
+    ```bash
+    DESIGN_BRIEF=<設計ブリーフ.md のパス> bash ~/.claude/skills/quiz-generator/references/publish_to_drive.sh <出力HTML> "<Drive教材フォルダ>" <出題履歴JSON>
+    ```
+    付け忘れ／sha256不一致なら `check_calibration.py` が配信を拒否する（exit 7）。
   - 中でPDFを自動生成し、HTML＋PDF＋出題履歴JSON を `rclone copy` → **Drive側に3点が着地したか検証**する。
   - **ブラウザが無い等でPDFを作れなければ非ゼロで止まる**＝HTMLだけ上げてPDFが欠ける漏れを防ぐ（2026-08-10 数学の類似問題集で実際に発生した漏れの再発防止）。
   - 再生成でDriveを上書きするときも**必ずこのスクリプトを通す**（PDFも作り直し、古い版を残さない）。

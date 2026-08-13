@@ -87,6 +87,18 @@ fi
 echo "▼ answer-validator 合格スタンプ照合：OK（sha256一致・status=pass）"
 echo ""
 
+# --- 0.6) 設計ブリーフ照合（2026-08-13 恒久ゲート）---
+#   期末模試（子のテスト対策）が「中間本番の分析＝設計ブリーフ」を反映して作られたかを機械で担保。
+#   出題履歴JSON に design_brief_required=true があるとき、DESIGN_BRIEF で渡したブリーフの
+#   sha256 と JSON の design_brief_sha256 が一致しなければ配信を拒否する。
+#   ＝「中間本番の反映方針を、期末模試を作るまで記憶に頼って保持→飛ばす」を物理的に封じる。
+#   design_brief_required が無い成果物（類題集・業務など）は素通り（後方互換）。
+if [ -n "$LOG_JSON" ]; then
+  echo "▼ 設計ブリーフ照合（期末模試のみ・design_brief_required）"
+  "$PYBIN" "$REF/check_calibration.py" "$LOG_JSON" ${DESIGN_BRIEF:+"$DESIGN_BRIEF"} || exit 7
+  echo ""
+fi
+
 # --- 1) headless Chrome を探す（両OS対応。無ければ止める＝PDFを黙って飛ばさない）---
 find_chrome() {
   # 環境変数 CHROME で明示指定を最優先
