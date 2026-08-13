@@ -186,6 +186,23 @@ quiz-generator / mock-test-generator に以下を貼って修正を依頼して�
 
 ---
 
+## ステップ 6：合格スタンプの発行（✗が0件のとき必須・省略禁止／2026-08-13）
+
+全問 ✓（✗0件）になったら、**最後に必ず合格スタンプを発行する**。これがないと配布できない：
+
+```bash
+python3 ~/.claude/skills/quiz-generator/references/av_stamp.py <検証したHTML> <log/出題履歴.json> --problems <問題数>
+```
+
+- スタンプは**検証したHTMLの sha256（中身の指紋）**を刻んで `<html>.av.json` に保存する。
+- **`publish_to_drive.sh` は、配信するHTMLの sha256 とスタンプが一致し status=pass でなければ配信を拒否する。**
+  ＝**answer-validator を飛ばして配信することも、検証後にHTMLを直して配信することも物理的にできない**
+  （2026-08-13 に answer-validator を飛ばした叱責を受けて機械ゲート化）。
+- ✗があるうちはスタンプを発行しない（修正→再検証→✗0件になってから発行）。
+- スタンプ発行時に check_leak／check_pitfalls を再実行し、落ちていればスタンプを書かない（二重の安全）。
+
+---
+
 ## 参考ファイル
 
 - `~/.claude/skills/quiz-generator/references/html-template.md` — 生成側の体裁の正典。

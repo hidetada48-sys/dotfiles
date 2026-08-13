@@ -647,6 +647,7 @@ with open(log_path, "w", encoding="utf-8") as f:
 
 - HTML と JSON の両ファイルを一時フォルダに書き出す
 - **HTMLをブラウザで開いて体裁を確認してから**、ファイルを提示する
+- **配信の前に answer-validator を通し、✗0件になったら `av_stamp.py` で合格スタンプを発行する**（2026-08-13 恒久ゲート）。**publish は sha256一致の合格スタンプが無いと配信を拒否する**＝answer-validator を飛ばす・検証後にHTMLを直す、が物理的にできない。
 - 確認後、**配布の関門スクリプトでDriveへ上げる（PDF化＋HTML/PDF/log の3点アップ＋着地検証。省略禁止）**：
   ```bash
   bash ~/.claude/skills/quiz-generator/references/publish_to_drive.sh <出力HTML> "<Drive教材フォルダ>" <log.json>

@@ -40,7 +40,37 @@ if [ -n "$LOG" ]; then
   "$PY" "$REF/check_pitfalls.py" "$HTML" "$LOG"
 fi
 
+# 配点・時間の検算（模試の出題履歴JSONに daimon_summary があるときだけ・2026-08-13 機械化）。
+# 旧来は「各自でassertを流す」honor systemだったが飛ばされたので run_checks に取り込む。
+if [ -n "$LOG" ]; then
+  echo "▼ 配点・時間の検算（模試のみ・daimon_summary があれば）"
+  "$PY" - "$LOG" <<'PY'
+import sys, json
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+ds = d.get("daimon_summary")
+if not ds:
+    print("  [skip] daimon_summary 無し＝類題集 or 検算対象外"); sys.exit(0)
+declared = d.get("declared_total_points")
+pts = sum(x.get("points", 0) for x in ds)
+if declared is None:
+    print("  [NG] declared_total_points が無い＝満点が宣言されていない"); sys.exit(1)
+ok = True
+if pts != declared:
+    print(f"  [NG] 配点合計 {pts} ≠ 宣言 {declared}"); ok = False
+else:
+    print(f"  [OK] 配点合計 {pts} = 宣言 {declared}")
+tl = d.get("time_minutes")
+if tl is not None and all("time_minutes" in x for x in ds):
+    tt = sum(x["time_minutes"] for x in ds)
+    if tt != tl:
+        print(f"  [NG] 目安時間合計 {tt} ≠ 宣言 {tl}"); ok = False
+    else:
+        print(f"  [OK] 目安時間合計 {tt} = 宣言 {tl}")
+sys.exit(0 if ok else 1)
+PY
+fi
+
 echo ""
-echo "⛔ ここまでが機械の関門。次を必ず実施すること："
-echo "   1) 配点・時間の検算（assert）を流したか"
-echo "   2) answer-validator スキルを通したか（答えの中身の検証・省略禁止）"
+echo "⛔ ここまでが機械の関門（漏れ・つまずき・配点）。残る必須は answer-validator："
+echo "   answer-validator スキルを通し、最後に av_stamp.py で合格スタンプを発行すること。"
+echo "   （publish_to_drive.sh は sha256一致の合格スタンプが無いと配信を拒否する）"

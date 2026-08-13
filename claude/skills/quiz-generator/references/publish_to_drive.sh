@@ -62,6 +62,31 @@ else
 fi
 echo ""
 
+# --- 0.5) answer-validator 合格スタンプの照合（2026-08-13 恒久ゲート）---
+#   answer-validator を通し av_stamp.py で発行したスタンプ <html>.av.json が、
+#   いま配信するHTMLの sha256 と一致し status=pass でなければ配信を拒否する。
+#   ＝「answer-validator を飛ばす」「検証後にHTMLを直す」が物理的にできなくなる（2026-08-13 専務指示）。
+PYBIN="$(command -v python3 || command -v python)"
+AV="$HTML.av.json"
+if [ ! -f "$AV" ]; then
+  echo "[NG] answer-validator 合格スタンプが無い（$AV）。"
+  echo "     answer-validator スキルで全問を検証し、最後に次を実行してから配信すること："
+  echo "       $PYBIN \"$REF/av_stamp.py\" \"$HTML\" \"$LOG_JSON\""
+  exit 6
+fi
+STAMP_STATUS="$("$PYBIN" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("status",""))' "$AV")"
+STAMP_SHA="$("$PYBIN" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("sha256",""))' "$AV")"
+CUR_SHA="$("$PYBIN" -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$HTML")"
+if [ "$STAMP_STATUS" != "pass" ]; then
+  echo "[NG] 合格スタンプが pass ではない。answer-validator を通し直すこと。"; exit 6
+fi
+if [ "$STAMP_SHA" != "$CUR_SHA" ]; then
+  echo "[NG] 合格スタンプの sha256 が現HTMLと一致しない＝検証後にHTMLが変わっている。"
+  echo "     answer-validator を通し直し、av_stamp.py を再発行してから配信すること。"; exit 6
+fi
+echo "▼ answer-validator 合格スタンプ照合：OK（sha256一致・status=pass）"
+echo ""
+
 # --- 1) headless Chrome を探す（両OS対応。無ければ止める＝PDFを黙って飛ばさない）---
 find_chrome() {
   # 環境変数 CHROME で明示指定を最優先
