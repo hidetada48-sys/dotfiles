@@ -27,6 +27,17 @@ fi
 shift 2
 EXTRAS=("$@")
 
+# DEST にリモート指定（例 gdrive:）が無ければ既定リモートを補完する（2026-08-13 修正）。
+#   これが無いと rclone は remote 無しパスを「ローカル」とみなし、
+#   ./中1テスト対策/… へ静かにコピー→同じローカルを lsf して「着地✓」＝偽陽性になる
+#   （2026-08-13 に実際に発生。gdrive: を付け忘れて未アップなのに✓が出た）。
+#   先頭が「名前:」でなければ ${RCLONE_REMOTE:-gdrive}: を前置。remote 名が違う環境では
+#   rclone がリモート未定義で明確に失敗する＝黙ってローカルへ落ちる事故より安全。
+if ! printf '%s' "$DEST" | grep -qE '^[A-Za-z0-9_-]+:'; then
+  DEST="${RCLONE_REMOTE:-gdrive}:$DEST"
+  echo "▼ DEST にリモート指定が無いため補完: $DEST"
+fi
+
 if [ ! -f "$HTML" ]; then
   echo "[NG] HTMLが見つからない: $HTML"; exit 2
 fi
