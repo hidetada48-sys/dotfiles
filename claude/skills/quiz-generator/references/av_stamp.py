@@ -22,6 +22,11 @@
 import sys, os, json, hashlib, subprocess, datetime
 
 def main():
+    # 子プロセスの出力をそのまま転記するので、標準出力も UTF-8 にしておく（2026-08-17）。
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
     args = [a for a in sys.argv[1:]]
     if not args:
         print("使い方: av_stamp.py <html> [log.json] [--problems N]"); return 2

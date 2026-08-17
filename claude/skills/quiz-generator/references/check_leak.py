@@ -97,6 +97,13 @@ def check(path):
 def main():
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
+    # 出力に ⛔ ⚠ を使うので、標準出力を必ず UTF-8 にする（2026-08-17）。
+    # Windows の既定は cp932 で、漏れを1件でも見つけた瞬間に UnicodeEncodeError で落ちる
+    # ＝「漏れが無いときだけ通る」検査になってしまう（他の check_*.py は設定済みだった）。
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
     hard_total = 0
     for path in sys.argv[1:]:
         answers, secs, head_leaks, body_leaks = check(path)
