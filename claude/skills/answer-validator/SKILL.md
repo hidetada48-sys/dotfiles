@@ -186,15 +186,36 @@ quiz-generator / mock-test-generator に以下を貼って修正を依頼して�
 
 ---
 
-## ステップ 6：合格スタンプの発行（✗が0件のとき必須・省略禁止／2026-08-13）
+## ステップ 6：検証レシートの発行（✗が0件のとき必須・省略禁止／2026-08-17 新設）
 
-全問 ✓（✗0件）になったら、**最後に必ず合格スタンプを発行する**。これがないと配布できない：
+**スタンプの前に、2A/2B/完全性の“証拠物（レシート）”を機械で残す。**
+2026-08-17、Claude が answer-validator を実際には起動せず「検証した」とだけ言って
+スタンプを押し配信した（証拠物ゼロ）。これを封じるため、レシート無しではスタンプできない。
+
+全問 ✓（✗0件）にしたら、独立解答（2A）を**全 mondai_id ぶん**列挙したファイル
+`rederived.json` を作り（`{ "1-【1】": {"a":"蘇我氏","twoC":"ok"}, ... 全問 ... }`）、次を通す：
+
+```bash
+python3 ~/.claude/skills/quiz-generator/references/av_report.py <HTML> <log/出題履歴.json> --rederived <rederived.json>
+```
+
+- **2B**（巻末①＝巻末②）と**完全性**（巻末①が log の全 id を覆う／件数一致）を機械で判定。
+- **2A**は短答型（知識・選択・穴埋め・計算・並べかえ）を巻末①と機械突合。記述・図表型は
+  照合不可のため「要目視」として**必ず列挙だけはさせる**（1問でも欠けると all_pass にならない）。
+- 結果を `<html>.avcheck.json`（HTMLの sha256 入り）に書く。all_pass でなければ非ゼロ終了。
+
+## ステップ 7：合格スタンプの発行（✗が0件のとき必須・省略禁止／2026-08-13）
+
+レシートが all_pass になったら、**最後に必ず合格スタンプを発行する**。これがないと配布できない：
 
 ```bash
 python3 ~/.claude/skills/quiz-generator/references/av_stamp.py <検証したHTML> <log/出題履歴.json> --problems <問題数>
 ```
 
 - スタンプは**検証したHTMLの sha256（中身の指紋）**を刻んで `<html>.av.json` に保存する。
+- **av_stamp は `<html>.avcheck.json`（レシート）の実在・sha一致・all_pass・全問列挙を要求する。**
+  無ければスタンプを発行しない＝**「検証した」と言うだけで証拠を残さず配信、が物理的にできない**
+  （2026-08-17 に answer-validator を起動せず押した叱責を受けて機械ゲート化）。
 - **`publish_to_drive.sh` は、配信するHTMLの sha256 とスタンプが一致し status=pass でなければ配信を拒否する。**
   ＝**answer-validator を飛ばして配信することも、検証後にHTMLを直して配信することも物理的にできない**
   （2026-08-13 に answer-validator を飛ばした叱責を受けて機械ゲート化）。
@@ -207,3 +228,7 @@ python3 ~/.claude/skills/quiz-generator/references/av_stamp.py <検証したHTML
 
 - `~/.claude/skills/quiz-generator/references/html-template.md` — 生成側の体裁の正典。
   どのクラスに何が入っているか（`.ansrow`＝巻末①、`.exp`＝巻末②）を確認するときに読む
+- `~/.claude/skills/quiz-generator/references/av_report.py` — **検証レシート発行**（ステップ6）。
+  2A/2B/完全性を機械で残す。**これを通さないと av_stamp がスタンプを拒否する**（2026-08-17 新設）
+- `~/.claude/skills/quiz-generator/references/av_stamp.py` — 合格スタンプ発行（ステップ7）。
+  レシートの実在・sha一致・all_pass を要求してから sha256 を刻む

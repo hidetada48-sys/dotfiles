@@ -66,8 +66,40 @@ def main():
             print("[NG] check_pitfalls が非ゼロ＝つまずき未反映。スタンプを発行しない。")
             print(_out(r2)); return 1
 
-    # 2) sha256 を刻んでスタンプ発行
     sha = hashlib.sha256(open(html, "rb").read()).hexdigest()
+
+    # 1.5) 検証レシート（av_report.py の成果物）を要求する（2026-08-17 新設ゲート）。
+    #   answer-validator の 2A/2B/完全性 を機械で残した証拠物。無い／sha不一致／
+    #   全問未列挙／all_pass でない ときはスタンプを発行しない。
+    #   ＝「検証した」と言うだけで証拠を残さず配信、を物理的に封じる。
+    receipt_path = html + ".avcheck.json"
+    if not os.path.isfile(receipt_path):
+        print("[NG] 検証レシートが無い: " + os.path.basename(receipt_path))
+        print("     先に `av_report.py <html> <log.json> --rederived <rederived.json>` を通すこと。")
+        print("     （answer-validator の 2A/2B/完全性の証拠物。これ無しではスタンプを発行しない）")
+        return 1
+    try:
+        rc = json.load(open(receipt_path, encoding="utf-8"))
+    except Exception as e:
+        print(f"[NG] 検証レシートが読めない: {e}"); return 1
+    if rc.get("html_sha256") != sha:
+        print("[NG] 検証レシートの sha256 が現HTMLと不一致＝検証後にHTMLを直したか、別ファイルのレシート。")
+        print(f"     レシート={str(rc.get('html_sha256'))[:16]}… / 現HTML={sha[:16]}…  av_report をやり直すこと。")
+        return 1
+    if not rc.get("all_pass"):
+        print("[NG] 検証レシートが all_pass でない（2A/2B/完全性に✗）。修正→av_report 再実行まで発行しない。")
+        return 1
+    if log:
+        try:
+            n_log = len(json.load(open(log, encoding="utf-8")).get("questions", []))
+            if rc.get("count_log") != n_log:
+                print(f"[NG] レシートの出題数({rc.get('count_log')}) と log({n_log}) が不一致。av_report をやり直すこと。")
+                return 1
+        except Exception:
+            pass
+    print(f"[OK] 検証レシート照合：all_pass・sha一致（出題{rc.get('count_log')}問）")
+
+    # 2) sha256 を刻んでスタンプ発行
     stamp = {
         "validator": "answer-validator",
         "status": "pass",

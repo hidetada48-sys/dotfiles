@@ -671,7 +671,7 @@ JSONファイル出力後、チャットに以下を表示する。
 ## ステップ 9：出力と確認
 
 - HTMLと出題履歴JSONを一時フォルダに書き出し、**ブラウザで体裁を確認してから**提示する
-- **配信の前に answer-validator を通し、✗0件になったら `av_stamp.py` で合格スタンプを発行する**（2026-08-13 恒久ゲート）。**publish は sha256一致の合格スタンプが無いと配信を拒否する**＝answer-validator を飛ばす・検証後にHTMLを直す、が物理的にできない。
+- **配信の前に answer-validator を通し、✗0件になったら `av_report.py`（検証レシート）→ `av_stamp.py`（合格スタンプ）の順で発行する**（2026-08-13 恒久ゲート／2026-08-17 レシート追加）。**av_stamp は `<html>.avcheck.json`（2A/2B/完全性の証拠物・sha一致・全問列挙・all_pass）が無いとスタンプを拒否**し、**publish は sha256一致の合格スタンプが無いと配信を拒否する**＝answer-validator を飛ばす（証拠を残さず「検証した」と言う）・検証後にHTMLを直す、が物理的にできない。
 - 確認後、**配布の関門スクリプトでDriveへ上げる（PDF化＋HTML/PDF/出題履歴JSON の3点アップ＋着地検証。省略禁止）**：
   ```bash
   bash ~/.claude/skills/quiz-generator/references/publish_to_drive.sh <出力HTML> "<Drive教材フォルダ>" <出題履歴JSON>
