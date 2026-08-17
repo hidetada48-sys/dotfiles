@@ -175,5 +175,45 @@
   "disabledMcpServers": [
     "claude.ai Gmail",
     "claude.ai Google Calendar"
-  ]
+  ],
+  "autoMode": {
+    "environment": [
+      "### Org-wide",
+      "**Organization**: 美濃桜製紙 (Mino-Sakura Paper) — personal/small-business context; GitHub account `hidetada48-sys`",
+      "**Cloud provider(s)**: None configured",
+      "**Repository visibility**: private (confirmed via gh API for `hidetada48-sys/mino-sakura-hq`)",
+      "**Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "**Secrets management**: local-only; API keys kept out of files and commands. Repo ignores `secrets/`, `*.env`, `private/`",
+      "**Default / protected branches**: default branch `master`; no classic protected branches listed and rulesets not queryable here — treat `master` as the working default without assuming protection",
+      "**CI/CD deploy targets**: None configured",
+      "**Network posture**: None configured — local report delivery observed at `http://127.0.0.1:8830` (loopback only)",
+      "**Source control**: The trusted repo and its remote(s) only — `https://github.com/hidetada48-sys/mino-sakura-hq.git` (private)",
+      "**Trusted internal domains**: `127.0.0.1` local report server (port 8830) only",
+      "**Trusted cloud buckets**: None configured",
+      "**Key internal services**: local static report server `python -m http.server 8830 --bind 127.0.0.1 --directory .reports_html`; rclone-based remote sync used from this project",
+      "**Internal package registry**: None configured",
+      "**Sensitive data locations & audiences**: business-confidential and personal data under this repo — `secrets/` (git-ignored, incl. `secrets/hr/労災/cases/` holding worker names and medical info), `clients/` (取引先 records, pricing, negotiation terms), `hr/` (labor/HR), `finance/`; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar",
+      "**Data retention / declassification**: None configured",
+      "**Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment (hyphen/underscore/dot-delimited — e.g. matches `prod-db`, not `producer`)",
+      "**Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "**Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+      "### User-specific",
+      "**Primary use of Claude Code**: business record-keeping and reporting assistant (Japanese-language 参謀 system) for a small paper manufacturer — markdown records, weekly/monthly reports, HTML report generation — alongside software development on the repo's own tooling",
+      "**Trusted repo**: `~/mino-sakura-hq` (Windows path `C:\\Users\\miryo\\mino-sakura-hq`) and its remote `github.com/hidetada48-sys/mino-sakura-hq` (private). Confidential business material is fine in this private repo; secrets and sensitive data (personal & entrusted) are never cleared into any repo by its visibility (see Definitions)",
+      "**Org-specific CLIs**: `rclone` (14x in this project), `nohup`; project tooling `python tools/report_html.py`, `python -m http.server 8830`, `tools/collect_open_cases.py`",
+      "**Routine under this repo's prefix**: report generation and serving under `.reports_html/`, `reviews/`, `intelligence/reports/`, `hr/reports/` are routine within this checkout only"
+    ],
+    "allow": [
+      "$defaults",
+      "Bash(rclone lsd:*)",
+      "Bash(rclone ls:*)",
+      "Bash(rclone about:*)"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Bash(rclone delete:*)",
+      "Bash(rclone purge:*)",
+      "Bash(rclone sync:*)"
+    ]
+  }
 }
