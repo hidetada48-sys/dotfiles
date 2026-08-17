@@ -66,7 +66,17 @@ echo ""
 #   answer-validator を通し av_stamp.py で発行したスタンプ <html>.av.json が、
 #   いま配信するHTMLの sha256 と一致し status=pass でなければ配信を拒否する。
 #   ＝「answer-validator を飛ばす」「検証後にHTMLを直す」が物理的にできなくなる（2026-08-13 専務指示）。
-PYBIN="$(command -v python3 || command -v python)"
+# Windows では `python3` が Microsoft Store のダミーに当たり、存在するのに走らない
+# （「Python」と出して終了コード49）。実際に走るかどうかで選ぶ（2026-08-17）。
+pick_py(){
+  for c in python3 python py; do
+    if command -v "$c" >/dev/null 2>&1 && "$c" -c "import sys" >/dev/null 2>&1; then
+      echo "$c"; return 0
+    fi
+  done
+  return 1
+}
+PYBIN="$(pick_py)" || { echo "[NG] 実行できる python が見つからない"; exit 3; }
 AV="$HTML.av.json"
 if [ ! -f "$AV" ]; then
   echo "[NG] answer-validator 合格スタンプが無い（$AV）。"
@@ -74,8 +84,10 @@ if [ ! -f "$AV" ]; then
   echo "       $PYBIN \"$REF/av_stamp.py\" \"$HTML\" \"$LOG_JSON\""
   exit 6
 fi
-STAMP_STATUS="$("$PYBIN" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("status",""))' "$AV")"
-STAMP_SHA="$("$PYBIN" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("sha256",""))' "$AV")"
+# JSONは必ず UTF-8 で開く。encoding 省略だと Windows は cp932 で読み、
+# 日本語を含むスタンプ/出題履歴で UnicodeDecodeError になる（2026-08-17）。
+STAMP_STATUS="$("$PYBIN" -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8")).get("status",""))' "$AV")"
+STAMP_SHA="$("$PYBIN" -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8")).get("sha256",""))' "$AV")"
 CUR_SHA="$("$PYBIN" -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$HTML")"
 if [ "$STAMP_STATUS" != "pass" ]; then
   echo "[NG] 合格スタンプが pass ではない。answer-validator を通し直すこと。"; exit 6
@@ -131,8 +143,29 @@ fi
 
 PDF="${HTML%.html}.pdf"
 echo "▼ PDF生成: $(basename "$PDF")  （$CHROME_BIN）"
+
+# Windows(git-bash) の chrome.exe は POSIX形式・相対パスを解釈できず
+# 「アクセスが拒否されました (0x5)」で出力に失敗する。Windows形式の絶対パスに直す（2026-08-17）。
+to_native() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -m -a "$1"   # -a を付けないと相対パスのまま返る（chrome が解決できない）
+  else
+    ( cd "$(dirname "$1")" && printf '%s/%s' "$(pwd -W 2>/dev/null || pwd)" "$(basename "$1")" )
+  fi
+}
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    PDF_ARG="$(to_native "$PDF")"
+    SRC_ARG="file:///$(to_native "$HTML")"
+    ;;
+  *)
+    PDF_ARG="$PDF"
+    SRC_ARG="$HTML"
+    ;;
+esac
+
 "$CHROME_BIN" --headless --disable-gpu --no-sandbox \
-  --print-to-pdf-no-header --print-to-pdf="$PDF" "$HTML" >/dev/null 2>&1 || true
+  --print-to-pdf-no-header --print-to-pdf="$PDF_ARG" "$SRC_ARG" >/dev/null 2>&1 || true
 if [ ! -s "$PDF" ]; then
   echo "[NG] PDF生成に失敗した（$PDF が空 or 無い）。配布を中止。"; exit 4
 fi

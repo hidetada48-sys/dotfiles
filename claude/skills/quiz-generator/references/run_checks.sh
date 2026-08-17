@@ -16,7 +16,18 @@
 #     → 最後に必ず起動することを掲示する（呼び忘れ防止）。
 set -e
 REF="$(cd "$(dirname "$0")" && pwd)"
-PY="$(command -v python3 || command -v python)"
+# Python の選び方（2026-08-17）：Windows では `python3` が Microsoft Store のダミーに
+# 当たり、「Python」と表示して終了コード49で落ちる。存在するだけでは判定できないので、
+# 実際に走るかどうかで選ぶ。
+pick_py(){
+  for c in python3 python py; do
+    if command -v "$c" >/dev/null 2>&1 && "$c" -c "import sys" >/dev/null 2>&1; then
+      echo "$c"; return 0
+    fi
+  done
+  return 1
+}
+PY="$(pick_py)" || { echo "[NG] 実行できる python が見つからない"; exit 2; }
 HTML="$1"; LOG="$2"; RANGE="$3"
 
 if [ -z "$HTML" ]; then

@@ -41,16 +41,25 @@ def main():
     ref = os.path.dirname(os.path.abspath(__file__))
     py = sys.executable
 
+    # 子プロセスの出力は必ず UTF-8 で読む（2026-08-17）。
+    # text=True だけだと Windows では locale(cp932) で復号され、日本語の出力で
+    # UnicodeDecodeError が起きて stdout が取れなくなる（判定は returncode なので
+    # 通ってしまうが、失敗時に理由が読めない）。
+    RUNOPT = dict(capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+    def _out(r):
+        return ((r.stdout or "") + (r.stderr or ""))[-600:]
+
     # 1) 機械ゲート再実行（落ちたらスタンプを書かない）
-    r = subprocess.run([py, f"{ref}/check_leak.py", html], capture_output=True, text=True)
+    r = subprocess.run([py, f"{ref}/check_leak.py", html], **RUNOPT)
     if r.returncode != 0:
         print("[NG] check_leak が非ゼロ＝答え漏れ。スタンプを発行しない。")
-        print((r.stdout + r.stderr)[-600:]); return 1
+        print(_out(r)); return 1
     if log:
-        r2 = subprocess.run([py, f"{ref}/check_pitfalls.py", html, log], capture_output=True, text=True)
+        r2 = subprocess.run([py, f"{ref}/check_pitfalls.py", html, log], **RUNOPT)
         if r2.returncode != 0:
             print("[NG] check_pitfalls が非ゼロ＝つまずき未反映。スタンプを発行しない。")
-            print((r2.stdout + r2.stderr)[-600:]); return 1
+            print(_out(r2)); return 1
 
     # 2) sha256 を刻んでスタンプ発行
     sha = hashlib.sha256(open(html, "rb").read()).hexdigest()
