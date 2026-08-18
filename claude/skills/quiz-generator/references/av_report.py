@@ -78,7 +78,10 @@ def main():
             return 2
 
     htmltext = open(html, encoding="utf-8").read()
-    sha = hashlib.sha256(htmltext.encode("utf-8")).hexdigest()
+    # sha256 は「生バイト」で取る（2026-08-18 修正）。テキスト読みだと Windows で
+    # CRLF→LF に変換され、生バイトで見る av_stamp / publish_to_drive と食い違い、
+    # 直後にスタンプが必ず拒否される（実際に発生）。配信側の見方に合わせる。
+    sha = hashlib.sha256(open(html, "rb").read()).hexdigest()
     ans1, ans2 = extract(htmltext)
     logd = json.load(open(log, encoding="utf-8"))
     qs = logd.get("questions", [])

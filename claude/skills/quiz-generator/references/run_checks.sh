@@ -8,6 +8,7 @@
 #   1. (log.json を渡せば) カバレッジ検査 check_coverage.py
 #   2. 答え漏れ検査 check_leak.py（見出しへの漏れがあれば終了コード非ゼロ＝ここで停止）
 #   3. (log.json を渡せば) つまずき検査 check_pitfalls.py（関連/類似2-3のpitfall＋巻末▶）
+#   4. (模試のみ) 承認ターン検査 check_approvals.py（質問/承認ターンを飛ばしていないか）
 #   どれかが失敗したら set -e により そこで止まる（次へ進めない＝ハード関門）。
 #
 # ★このランナーで強制できるのは「機械で判定できる関門」だけ。
@@ -79,6 +80,11 @@ if tl is not None and all("time_minutes" in x for x in ds):
         print(f"  [OK] 目安時間合計 {tt} = 宣言 {tl}")
 sys.exit(0 if ok else 1)
 PY
+fi
+
+if [ -n "$LOG" ]; then
+  echo "▼ 承認ターンの検査（模試のみ・質問/承認を飛ばしていないか）"
+  "$PY" "$REF/check_approvals.py" "$LOG"
 fi
 
 echo ""
