@@ -82,6 +82,33 @@ def main():
     # CRLF→LF に変換され、生バイトで見る av_stamp / publish_to_drive と食い違い、
     # 直後にスタンプが必ず拒否される（実際に発生）。配信側の見方に合わせる。
     sha = hashlib.sha256(open(html, "rb").read()).hexdigest()
+
+    # 再発防止（2026-08-18）：answer-validator スキルのステップ0で発行される開始トークンを要求する。
+    # ＝スキルを起動せず av_report を直叩きすると、トークンが無く受理しない
+    #   （av_begin.py は answer-validator SKILL.md ステップ0 でのみ実行するよう規定）。
+    begin = html + ".avbegin.json"
+    if not os.path.isfile(begin):
+        print("[NG] 開始トークン(.avbegin.json)が無い＝answer-validator スキルのステップ0を"
+              "通っていない。av_report を直叩きせず、answer-validator スキルを起動すること。")
+        return 2
+    try:
+        bt = json.load(open(begin, encoding="utf-8"))
+    except Exception:
+        print("[NG] 開始トークンが壊れている。answer-validator スキルを起動し直すこと。")
+        return 2
+    if bt.get("html_sha256") != sha:
+        print("[NG] 開始トークンの sha が現HTMLと不一致＝トークン発行後にHTMLが変わった/別物。"
+              "answer-validator スキルのステップ0(av_begin.py)からやり直すこと。")
+        return 2
+    try:
+        _age = (datetime.datetime.now()
+                - datetime.datetime.fromisoformat(bt.get("started_at", ""))).total_seconds()
+        if _age > 24 * 3600:
+            print("[NG] 開始トークンが古い（24時間超）。answer-validator スキルを起動し直すこと。")
+            return 2
+    except Exception:
+        pass
+
     ans1, ans2 = extract(htmltext)
     logd = json.load(open(log, encoding="utf-8"))
     qs = logd.get("questions", [])
