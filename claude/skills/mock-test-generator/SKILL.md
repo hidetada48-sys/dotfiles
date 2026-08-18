@@ -643,18 +643,27 @@ HTMLと同じフォルダに出力する（`json.dump(..., ensure_ascii=False, i
   "unit": "単元名",
   "level": "基礎 / 標準 / 応用",
   "description_volume": "多め / 標準 / 少なめ",
+  "total_points": 100,
+  "time_limit": 50,
   "questions": [
     {
       "mondai_id": "大問1-(1)",
       "core_item": "コア項目名",
       "format": "選択 / 穴埋め / 記述 / 表 / 図表読み取り など",
       "difficulty": 0,
+      "point": 2,
       "pitfall": "狙うつまずき（常設カタログ記号＋単元固有）。無ければ \"なし（知識確認）\""
     }
   ]
 }
 ```
 
+※ `total_points`・各設問の `point` は**必須**（2026-08-18）。配信前の `run_checks.sh` の配点検算が
+　 **`questions[].point` の合計 == `total_points`** を機械で照合する（合わなければ配信不可）。
+　 満点は `TOTAL_POINTS`（ステップ3）と一致させる。**この欄が無いと配点検算が発火せず素通りする**
+　 （旧版は `daimon_summary` を判定キーにしていたが、スキルが出力せず全模試が skip していた＝
+　 承認関門・配点検算がともに無効化。判定を `questions` に統一し、配点は `point` から取るよう修正）。
+　 `time_limit` は `TIME_LIMIT` と一致させる。
 ※ `pitfall` は**全コア項目に必須**（2026-08-11）。ステップ2④の「つまずきを重ねて出題」を
 　 機械で担保する `check_pitfalls.py` がこの欄を見る。**キーごと省くのは不可**＝罠が無い問は
 　 `"なし（知識確認）"` と明示する。罠を狙う問は**巻末（解説）に「▶よくある誤り」を1行**書くこと。

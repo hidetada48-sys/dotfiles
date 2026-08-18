@@ -19,8 +19,12 @@
   }
 
 使い方: check_approvals.py <出題履歴JSON>
-※ approvals キーそのものが無い場合は「類題集など対象外」として素通りさせない。
-   模試（daimon_summary あり）は必須、それ以外は skip。
+※ 模試か類題集かは「questions（模試）か problems（類題集）か」で判定する。
+   模試は approvals 必須、類題集は skip。
+   （2026-08-18 修正：旧版は daimon_summary で判定していたが、mock-test-generator は
+    daimon_summary を出力しないため、全模試が「類題集」と誤認され関門が丸ごと skip して
+    いた＝再発防止が無効化。判定キーを、スキルが必ず出す questions に統一した。
+    この discriminator は check_pitfalls.py / av_report.py と同一。）
 """
 import json
 import sys
@@ -38,8 +42,9 @@ def main():
         return 2
     d = json.load(open(sys.argv[1], encoding="utf-8"))
 
-    if not d.get("daimon_summary"):
-        print("  [skip] daimon_summary 無し＝模試でない（類題集）ため承認関門は対象外")
+    # 模試＝questions を持つ／類題集＝problems を持つ。スキルが必ず出す questions で判定する。
+    if "questions" not in d:
+        print("  [skip] questions 無し＝模試でない（類題集は problems）ため承認関門は対象外")
         return 0
 
     ap = d.get("approvals")

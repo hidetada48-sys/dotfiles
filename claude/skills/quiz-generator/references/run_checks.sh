@@ -55,24 +55,33 @@ fi
 # 配点・時間の検算（模試の出題履歴JSONに daimon_summary があるときだけ・2026-08-13 機械化）。
 # 旧来は「各自でassertを流す」honor systemだったが飛ばされたので run_checks に取り込む。
 if [ -n "$LOG" ]; then
-  echo "▼ 配点・時間の検算（模試のみ・daimon_summary があれば）"
+  echo "▼ 配点・時間の検算（模試のみ・questions[].point 合計 == total_points）"
   "$PY" - "$LOG" <<'PY'
 import sys, json
 d = json.load(open(sys.argv[1], encoding="utf-8"))
+# 模試=questions / 類題集=problems で判定（2026-08-18 修正：旧版は daimon_summary 判定で、
+# スキルが daimon_summary を出さないため全模試が skip し配点検算が無効化していた）。
+qs = d.get("questions")
+if qs is None:
+    print("  [skip] questions 無し＝類題集 or 検算対象外"); sys.exit(0)
+declared = d.get("declared_total_points", d.get("total_points"))
 ds = d.get("daimon_summary")
-if not ds:
-    print("  [skip] daimon_summary 無し＝類題集 or 検算対象外"); sys.exit(0)
-declared = d.get("declared_total_points")
-pts = sum(x.get("points", 0) for x in ds)
+if ds:
+    pts = sum(x.get("points", 0) for x in ds); src = "daimon_summary"
+else:
+    pts = sum(x.get("point", 0) for x in qs); src = "questions[].point"
 if declared is None:
-    print("  [NG] declared_total_points が無い＝満点が宣言されていない"); sys.exit(1)
+    print("  [NG] 満点が宣言されていない（total_points / declared_total_points が無い）"); sys.exit(1)
+if pts == 0:
+    print("  [NG] 配点が読めない（daimon_summary も questions[].point も無い）"
+          "＝模試の出題履歴JSONに各設問の point か daimon_summary を持たせること"); sys.exit(1)
 ok = True
 if pts != declared:
-    print(f"  [NG] 配点合計 {pts} ≠ 宣言 {declared}"); ok = False
+    print(f"  [NG] 配点合計 {pts} ≠ 宣言 {declared}（{src}）"); ok = False
 else:
-    print(f"  [OK] 配点合計 {pts} = 宣言 {declared}")
-tl = d.get("time_minutes")
-if tl is not None and all("time_minutes" in x for x in ds):
+    print(f"  [OK] 配点合計 {pts} = 宣言 {declared}（{src}）")
+tl = d.get("time_minutes", d.get("time_limit"))
+if ds and tl is not None and all("time_minutes" in x for x in ds):
     tt = sum(x["time_minutes"] for x in ds)
     if tt != tl:
         print(f"  [NG] 目安時間合計 {tt} ≠ 宣言 {tl}"); ok = False
