@@ -96,6 +96,14 @@ if [ -n "$LOG" ]; then
   "$PY" "$REF/check_approvals.py" "$LOG"
 fi
 
+# 難易度構成の検査（模試のみ・2026-08-19 新設）。
+# 配点移動だけで「応用」を名乗る抜け穴を塞ぐ。各設問の load(drill/apply/think) の
+# 配点構成比が level(基本/標準/応用) の基準を満たさなければ set -e で停止する。
+if [ -n "$LOG" ]; then
+  echo "▼ 難易度構成の検査（模試のみ・応用は drill≤35% かつ apply+think≥50%）"
+  "$PY" "$REF/check_difficulty.py" "$LOG"
+fi
+
 echo ""
 echo "⛔ ここまでが機械の関門（漏れ・つまずき・配点）。残る必須は answer-validator："
 echo "   answer-validator スキルを通し、最後に av_stamp.py で合格スタンプを発行すること。"
