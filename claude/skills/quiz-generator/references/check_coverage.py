@@ -21,10 +21,28 @@ pages_scanned が2件・visual_emphasis が2件なら整合はとれているが
       不足が1件でもあれば終了コード1（＝そのまま模試を作ってはいけない）。
 """
 import json
+import re
 import sys
 
 THIN = 3        # emphasis_points がこれ未満なら読み取りが浅い疑い（絶対の下限）
 THIN_RATIO = 0.4  # 他ページの中央値に対してこの割合を下回るページも同じ疑い
+
+
+def norm(page):
+    """ページ名の表記ゆれを吸収する（2026-08-19）。
+
+    同じ log.json の中で pages_scanned が「P.3(見開き：人類の出現と古代文明)」、
+    visual_emphasis が「P.3 見開き」のように別表記で書かれることがある。
+    文字列の完全一致で照合すると、実際には読めているのに [不足] と出て止まる。
+    ページを指す部分（P.3 / p.18-19 など）だけを取り出して比べる。
+    覆えているかの判定そのものは緩めない（範囲の全ページが必要なのは変わらない）。
+    """
+    t = str(page).strip()
+    t = re.split(r'[（(]', t)[0]              # 「(見開き：…)」以降の説明を落とす
+    t = t.replace('　', ' ').strip()
+    t = re.sub(r'\s*見開き\s*$', '', t)       # 末尾の「見開き」を落とす
+    t = re.sub(r'\s+', '', t)
+    return t.upper().replace('．', '.')
 
 
 def load_range(log, argv):
@@ -54,35 +72,37 @@ def check(path, argv):
         print('     --range p.18-19,p.20-21 のように渡してください。')
         return 1
 
-    scanned = log.get('pages_scanned') or []
+    scanned_raw = log.get('pages_scanned') or []
+    scanned = {norm(x) for x in scanned_raw}
     # visual_emphasis のうち、範囲外と印を付けたものは覆う対象から外す
-    ve = {e['page']: e for e in log.get('visual_emphasis', [])
+    ve = {norm(e['page']): e for e in log.get('visual_emphasis', [])
           if not e.get('out_of_range')}
 
     print(f'出題範囲（{src}）: {len(rng)}件  {" ".join(rng)}')
-    print(f'pages_scanned  : {len(scanned)}件  {" ".join(scanned)}')
+    print(f'pages_scanned  : {len(scanned_raw)}件  {" ".join(scanned_raw)}')
     print(f'visual_emphasis: {len(ve)}件（範囲外の印が付いたものを除く）')
     print('-' * 60)
 
     # 「浅いページ」を判定するための基準（覆えているページの中央値）
-    counts = sorted(len(ve[p].get('emphasis_points') or []) for p in rng if p in ve)
+    counts = sorted(len(ve[norm(p)].get('emphasis_points') or []) for p in rng if norm(p) in ve)
     med = counts[len(counts) // 2] if counts else 0
     floor = max(THIN, med * THIN_RATIO)
 
     ng = 0
     thin = []
     for p in rng:
+        key = norm(p)
         miss = []
-        if p not in scanned:
+        if key not in scanned:
             miss.append('pages_scanned に無い')
-        if p not in ve:
+        if key not in ve:
             miss.append('visual_emphasis に無い')
         if miss:
             ng += 1
             print(f'[不足] {p} … {" / ".join(miss)}')
             continue
-        n = len(ve[p].get('emphasis_points') or [])
-        k = len(ve[p].get('key_sentences') or [])
+        n = len(ve[key].get('emphasis_points') or [])
+        k = len(ve[key].get('key_sentences') or [])
         # ★空ページはハード[NG]（2026-08-11 強化）。pages_scanned/visual_emphasis に
         #   ページ名を並べただけで中身が無い＝実際に読んでいない状態を通さない。
         if n == 0 and k == 0:
@@ -97,7 +117,8 @@ def check(path, argv):
         print(f'[OK]   {p} … 強調{n}件 / 見出し{k}件{mark}')
 
     # 範囲に入っていないのに読んであるページ（＝範囲の取り違えの手がかり）
-    extra = [p for p in ve if p not in rng]
+    rng_keys = {norm(p) for p in rng}
+    extra = [p for p in ve if p not in rng_keys]
     if extra:
         print('-' * 60)
         print(f'[参考] 範囲外だが読み取り済み: {" ".join(extra)}')
