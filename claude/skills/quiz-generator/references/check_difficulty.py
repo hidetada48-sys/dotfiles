@@ -12,7 +12,10 @@
   ラベルだけ「応用」に貼り替えられてしまっていた（2026-08-19 専務叱責）。
 
 ■ 何を機械で縛るか
-  各設問に負荷区分 `load` を必須で持たせ、その配点構成比を検算する。
+  各設問に負荷区分 `load` を必須で持たせ、その「設問数（問題数）の構成比」を検算する。
+  ※配点比ではなく設問数比で見る（2026-08-19 改修）。配点は作り手の匙加減なので、
+    配点で割ると think に高配点・drill に低配点を振るだけで割合を偽装でき、
+    封じたはずの『配点移動での応用偽装』と同じ穴になるため。1問=1票で数える。
   load は「解くのに何手かかるか」で決める（format＝出題形式とは別軸）。
     - drill … 1手で終わる：単純計算・一問一答・用語の想起・定義の確認
     - apply … 複数手：複数ステップ計算・条件処理・場合分け・資料読み取り
@@ -86,35 +89,36 @@ def main():
         print("  [skip] level=基本 は易問中心が正しいため難易度構成は検査しない")
         sys.exit(0)
 
-    total = d.get("declared_total_points", d.get("total_points"))
-    if not total:
-        print("  [NG] 満点が宣言されていない（total_points）")
-        sys.exit(1)
-
-    # 各設問の load を集計
+    # ★構成比は「設問数（問題数）」で見る（2026-08-19 改修・専務指摘）。
+    #   配点で割ると「think問に高い配点／drill問に低い配点」を振るだけで割合をいじれてしまい、
+    #   これは封じたはずの『配点移動での“応用”偽装』とまったく同じ抜け道になる。
+    #   配点はこちらの匙加減なので恣意性が残る。→ 1問=1票の設問数比で判定し、
+    #   基準を満たすには“易問を実際に思考問題へ差し替える”しかない形にする。
     by = {"drill": 0, "apply": 0, "think": 0}
     missing = []
-    ptsum = 0
     for q in qs:
-        p = q.get("point", 0) or 0
-        ptsum += p
         ld = norm_load(q.get("load"))
         if ld is None:
             missing.append(q.get("mondai_id", "?"))
             continue
-        by[ld] += p
+        by[ld] += 1
 
     if missing:
         print("  [NG] load 未設定の設問がある（drill/apply/think を必須）: "
               + " ".join(str(m) for m in missing[:20]))
         sys.exit(1)
 
+    nq = by["drill"] + by["apply"] + by["think"]
+    if nq == 0:
+        print("  [NG] load 付きの設問が0問")
+        sys.exit(1)
+
     drill = by["drill"]
     hard = by["apply"] + by["think"]
-    dr = drill / total * 100
-    hd = hard / total * 100
+    dr = drill / nq * 100
+    hd = hard / nq * 100
 
-    print(f"  内訳: drill={drill}点({dr:.0f}%) / apply+think={hard}点({hd:.0f}%) / 満点{total}")
+    print(f"  内訳: drill={drill}問({dr:.0f}%) / apply+think={hard}問({hd:.0f}%) / 設問{nq}問")
 
     ok = True
     if bucket == "advanced":
