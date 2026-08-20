@@ -12,7 +12,6 @@
     ],
     "defaultMode": "acceptEdits"
   },
-  "model": "opus",
   "hooks": {
     "PreToolUse": [
       {
@@ -162,21 +161,19 @@
   "showThinkingSummaries": true,
   "skipDangerousModePermissionPrompt": true,
   "skipAutoPermissionPrompt": true,
-  "mcpServers": {
-    "basic-memory": {
-      "command": "uvx",
-      "args": [
-        "basic-memory",
-        "mcp"
-      ],
-      "alwaysLoad": true
-    }
-  },
-  "disabledMcpServers": [
-    "claude.ai Gmail",
-    "claude.ai Google Calendar"
-  ],
   "autoMode": {
+    "allow": [
+      "$defaults",
+      "Bash(rclone lsd:*)",
+      "Bash(rclone ls:*)",
+      "Bash(rclone about:*)"
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Bash(rclone delete:*)",
+      "Bash(rclone purge:*)",
+      "Bash(rclone sync:*)"
+    ],
     "environment": [
       "### Org-wide",
       "**Organization**: 美濃桜製紙 (Mino-Sakura Paper) — personal/small-business context; GitHub account `hidetada48-sys`",
@@ -202,18 +199,21 @@
       "**Trusted repo**: `~/mino-sakura-hq` (Windows path `C:\\Users\\miryo\\mino-sakura-hq`) and its remote `github.com/hidetada48-sys/mino-sakura-hq` (private). Confidential business material is fine in this private repo; secrets and sensitive data (personal & entrusted) are never cleared into any repo by its visibility (see Definitions)",
       "**Org-specific CLIs**: `rclone` (14x in this project), `nohup`; project tooling `python tools/report_html.py`, `python -m http.server 8830`, `tools/collect_open_cases.py`",
       "**Routine under this repo's prefix**: report generation and serving under `.reports_html/`, `reviews/`, `intelligence/reports/`, `hr/reports/` are routine within this checkout only"
-    ],
-    "allow": [
-      "$defaults",
-      "Bash(rclone lsd:*)",
-      "Bash(rclone ls:*)",
-      "Bash(rclone about:*)"
-    ],
-    "soft_deny": [
-      "$defaults",
-      "Bash(rclone delete:*)",
-      "Bash(rclone purge:*)",
-      "Bash(rclone sync:*)"
     ]
-  }
+  },
+  "mcpServers": {
+    "basic-memory": {
+      "command": "uvx",
+      "args": [
+        "basic-memory",
+        "mcp"
+      ],
+      "alwaysLoad": true
+    }
+  },
+  "disabledMcpServers": [
+    "claude.ai Gmail",
+    "claude.ai Google Calendar"
+  ],
+  "model": "opus"
 }
