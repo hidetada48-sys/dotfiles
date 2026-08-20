@@ -96,11 +96,12 @@ if [ -n "$LOG" ]; then
   "$PY" "$REF/check_approvals.py" "$LOG"
 fi
 
-# 難易度構成の検査（模試のみ・2026-08-19 新設）。
-# 配点移動だけで「応用」を名乗る抜け穴を塞ぐ。各設問の load(drill/apply/think) の
-# 配点構成比が level(基本/標準/応用) の基準を満たさなければ set -e で停止する。
+# 難易度構成の検査（模試のみ・2026-08-19 新設／2026-08-20 2軸化）。
+# 配点移動だけで「応用」を名乗る抜け穴を塞ぐ。difficulty_primary で主軸を切替え、
+# complexity(数学等)は内容の複雑さ(low/mid/high)、process(暗記系)は load(recall/select/construct)
+# の設問数構成比が level(基本/標準/応用) の基準を満たさなければ set -e で停止する。
 if [ -n "$LOG" ]; then
-  echo "▼ 難易度構成の検査（模試のみ・応用は drill≤35% かつ apply+think≥50%）"
+  echo "▼ 難易度構成の検査（模試のみ・2軸：complexity=数学等／process=暗記系）"
   "$PY" "$REF/check_difficulty.py" "$LOG"
 fi
 

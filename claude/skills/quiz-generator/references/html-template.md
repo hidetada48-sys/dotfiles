@@ -82,13 +82,19 @@ quiz-generator / mock-test-generator が出力するHTMLの唯一の手本。
   <div class="pagebreak"></div>
   <h2 class="back">巻末②　解説</h2>
   <div class="exp">
-    <p class="expttl">p.5 ⑥(1) 問1（類似）</p>
+    <p class="expttl">p.5 ⑥(1) 問1（類似）　答え：-5/2, -3/2, -1/3, 0, 3/4, 4</p>
     <p>解説の本文。考え方と間違えやすい点を書く。</p>
   </div>
 </div>
 </body>
 </html>
 ```
+
+**★巻末②の `expttl` は必ず `{id}　答え：{答え}` の形にする（省略禁止・2026-08-20）。**
+answer-validator の `av_report.py`（2B＝巻末①と巻末②の突合）は、巻末②の答えを
+`<p class="expttl">大問1-【1】　答え：-ab</p>` の「　答え：」以降から機械抽出する。
+この「　答え：」が無いと 2B が全問✗＝合格スタンプが出ず配信できない。
+巻末②の答え文字列は**巻末①の解答一覧とまったく同じ**にすること（正規化して一致を見る）。
 
 ---
 
