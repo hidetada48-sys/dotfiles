@@ -18,7 +18,9 @@
 #   全 mondai_id ぶん列挙したもの：
 #     { "大問1-【1】": {"a": "蘇我氏", "twoC": "ok"},  ... 全問 ... }
 #     ・a    … 独立解答（短答型は巻末①と機械突合。記述・図表型は照合不可＝記録のみ「要目視」）
-#     ・twoC … 知識検証の判定（"ok" / "na"（固有名詞なし）/ 任意の注記文字列）
+#     ・twoC … 知識検証の判定。★非・計算問題は必須（2026-08-20）＝空だと all_pass にならない。
+#              "ok"（web裏取り済）/ "na"（固有名詞・年号なし）/ "要確認"（曖昧・専務目視）/ 任意の注記。
+#              ＝2C（固有名詞・年号の裏取り）を飛ばすとレシートが通らず、スタンプ＝配信に到達できない。
 #
 # 動作：
 #   1. 巻末①(.ansrow)・巻末②(.expttl) を HTML から抽出。
@@ -148,7 +150,28 @@ def main():
         problems.append(dict(id=qid, format=fmt, ans_listed=a1, ans_exp=a2,
                              twoB=twoB, rederived=my, twoA=twoA, twoC=r.get("twoC", "")))
 
-    all_pass = bool(twoB_all and twoA_all and completeness_ok)
+    # 2C 知識検証の証跡を必須化（2026-08-20 新設・恒久ゲート）。
+    #   なぜ要るか（2026-08-20 の失敗）：av_begin/av_report/av_stamp のスクリプトだけ通せば、
+    #   2C（固有名詞・年号・数値の web 裏取り）を1件もやらずに合格スタンプが出て配信できた。
+    #   ＝レシートは 2A(機械照合)/2B/完全性 しか見ておらず「事実を確かめたか」を要求していなかった。
+    #   対策：固有名詞・年号を含みうる「非・計算問題」は rederived に twoC を必ず持たせる。
+    #   twoC は "ok"（裏取り済）/"na"（固有名詞・年号なし）/"要確認"（曖昧・専務目視）/任意の注記。
+    #   空・未記入なら all_pass にしない＝2C を飛ばすとスタンプが出ず配信に到達できない。
+    #   純粋な計算問題（format に「計算」）は固有名詞が無いため 2C 不要（除外）。
+    twoC_missing = []
+    twoC_review = []
+    for qid in log_ids:
+        fmt = fmt_of.get(qid, "")
+        if "計算" in fmt:
+            continue
+        v = str(rd.get(qid, {}).get("twoC", "")).strip()
+        if not v:
+            twoC_missing.append(qid)
+        elif v in ("要確認", "要目視", "?"):
+            twoC_review.append(qid)
+    twoC_ok = not twoC_missing
+
+    all_pass = bool(twoB_all and twoA_all and completeness_ok and twoC_ok)
     receipt = dict(
         validator="av_report",
         html=os.path.basename(html),
@@ -159,6 +182,9 @@ def main():
         twoB_all_pass=twoB_all,
         twoA_short_all_pass=twoA_all,
         completeness_ok=completeness_ok,
+        twoC_all_present=twoC_ok,
+        twoC_missing=twoC_missing,
+        twoC_review=twoC_review,
         all_pass=all_pass,
         problems=problems,
         generated_at=datetime.datetime.now().isoformat(timespec="seconds"),
@@ -171,6 +197,12 @@ def main():
     print(f"  2B(①=②) : {'全一致' if twoB_all else '✗あり'}")
     print(f"  2A(短答) : {'全一致' if twoA_all else '✗あり'}（記述・図表は要目視で除外）")
     print(f"  完全性   : {'OK' if completeness_ok else 'NG'}")
+    print(f"  2C(裏取り): {'全問記入' if twoC_ok else 'NG（未記入あり）'}"
+          f"{'／要確認 ' + str(len(twoC_review)) + '問' if twoC_review else ''}")
+    if twoC_missing:
+        print(f"    ✗ twoC 未記入（2Cを飛ばしている）: {twoC_missing[:20]}")
+        print("      → 各問の固有名詞・年号を web で裏取りし、rederived に "
+              '"twoC":"ok"（または固有名詞なしは "na"）を入れて再実行すること。')
     if miss_in_ans1:
         print(f"    ✗ 巻末①に無い出題: {miss_in_ans1}")
     if miss_in_rd:

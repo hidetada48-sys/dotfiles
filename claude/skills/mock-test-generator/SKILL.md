@@ -33,6 +33,25 @@ bash ~/.claude/skills/quiz-generator/references/run_checks.sh <既存HTML> <既�
 - **docx の成果物は旧版**（HTML＋PDF＋3点配布・つまずき駆動より前）＝原則すべて作り直し対象。
 - 「最新スキルで作られているか確認して」と聞かれたら、日付の推測ではなく**この関門を実際に通して**判定する（2026-08-13 に中間の地理模試が旧版のまま残っていた＝pitfall 0・▶ 0本で判明）。
 
+### 難易度ゲートだけで弾かれた既存テストの回復（Step3〜5をやり直さない・2026-08-19）
+
+棚卸しの `run_checks.sh` が **`check_difficulty.py` だけで [NG]**（＝leak・pitfall・配点・承認は通り、
+`load` 未設定 or 応用なのに drill＞35%/apply+think＜50% のみ失敗）だったときは、**新規生成に戻らない**。
+設定（満点・時間・記述量・難易度・配合）とコア項目・構成は**既存の承認が生きている**ので、
+**ステップ3の質問・ステップ4/5の承認ターンはやり直さず**、次の難易度回復だけを行う：
+
+1. 既存の出題履歴JSONと巻末を材料に、**各設問へ `load`（drill/apply/think）を正直に付ける**。
+2. 構成比を測り、応用基準（drill≤35%・apply+think≥50%・**設問数比**）を満たすまで、
+   **一問一答（drill）を実際に思考問題（apply/think）へ差し替える**（因果を問う／複数事項を
+   結びつける／年表・資料から判断させる／紛らわしい対を見分けさせる／誤りを選ばせる）。
+   **配点移動・ラベル貼り替え・記述の本数増やしはしない**（記述量は既存の設定のまま）。
+3. HTML＋出題履歴JSONを作り直し、`run_checks.sh` を **[OK]** になるまで回す。
+4. 中身が変わったので **answer-validator を通し直す**（av_begin→check_leak→av_report→av_stamp。
+   HTMLの sha が変わる＝スタンプ再発行必須）。
+5. `DESIGN_BRIEF` 付きで `publish_to_drive.sh` で配信。
+※ 既存JSONの `approvals` ブロックはそのまま引き継ぐ（設定・承認を専務が変えていないため）。
+　 pitfall や他の関門も同時に [NG] のときは旧版扱い＝**通常の作り直し**（ステップ1から）に戻す。
+
 ---
 
 ## ステップ 1：インプット収集
@@ -597,10 +616,19 @@ bash ~/.claude/skills/quiz-generator/references/run_checks.sh <出力HTML> <出�
 ```
 
 - `run_checks.sh` は中で `check_coverage.py`（出題履歴JSONは自動スキップ）→ `check_leak.py`
-  → **`check_pitfalls.py`** を順に実行し、失敗した時点で止まる（＝ハード関門）。
+  → **`check_pitfalls.py`** → 配点検算 → 承認検査 → **`check_difficulty.py`** を順に実行し、
+  失敗した時点で止まる（＝ハード関門）。
 - `check_pitfalls.py` は出題履歴JSONの**各コア項目に `pitfall` があるか**、巻末に
   「▶よくある誤り」が**罠の数だけ**あるかを見る。**pitfall欠落は配布不可**（罠が無い問は
   `"なし（知識確認）"` と明示。キーごと省くのは不可）。
+- **`check_difficulty.py`（難易度構成ゲート・2026-08-19）** は出題履歴JSONの**各設問に `load`
+  （drill/apply/think）があるか**と、その**設問数の構成比**を見る（1問=1票／配点比ではない）。
+  応用＝**drill≤35% かつ apply+think≥50%**、標準＝drill≤60%、基本＝skip。**level 宣言と
+  各設問の `load` が無いと配布不可**。`load` は format（出題形式）ではなく「**解くのに何手か**」で
+  決める＝drill（1手：一問一答・用語想起・単純計算）／apply（複数手：資料読み取り・複数事項の
+  結びつけ・誤り選択・並べかえ・条件処理）／think（統合・論証：理由や過程の記述）。**難易度を
+  上げる＝一問一答（drill）を実際に思考問題（apply/think）へ差し替える**こと（配点移動・ラベル
+  貼り替え・記述増やしでは通らない）。
 - `check_coverage.py` は**各ページの visual_emphasis が空ならNG**（＝pages_scanned に名前を
   並べただけの「読んでいない範囲」を通さない。②全範囲読了の機械的担保）。**生成前に必ず通す。**
 - 配布 `publish_to_drive.sh` は内部で `run_checks.sh` を先に通す（出題履歴JSONを渡す）ので、
@@ -669,6 +697,7 @@ HTMLと同じフォルダに出力する（`json.dump(..., ensure_ascii=False, i
       "core_item": "コア項目名",
       "format": "選択 / 穴埋め / 記述 / 表 / 図表読み取り など",
       "difficulty": 0,
+      "load": "drill / apply / think",
       "point": 2,
       "pitfall": "狙うつまずき（常設カタログ記号＋単元固有）。無ければ \"なし（知識確認）\""
     }
@@ -685,6 +714,10 @@ HTMLと同じフォルダに出力する（`json.dump(..., ensure_ascii=False, i
 ※ `pitfall` は**全コア項目に必須**（2026-08-11）。ステップ2④の「つまずきを重ねて出題」を
 　 機械で担保する `check_pitfalls.py` がこの欄を見る。**キーごと省くのは不可**＝罠が無い問は
 　 `"なし（知識確認）"` と明示する。罠を狙う問は**巻末（解説）に「▶よくある誤り」を1行**書くこと。
+※ `load`（drill/apply/think）は**全設問に必須**（2026-08-19）。配信前の `run_checks.sh` の
+　 **`check_difficulty.py`** がこの欄を見て、level（基本/標準/応用）に対する設問数の構成比を
+　 照合する（応用＝drill≤35%・apply+think≥50%／1問=1票）。**欄が無いと配信不可。** `load` は
+　 format ではなく「**解くのに何手か**」で決める（drill＝1手／apply＝複数手／think＝統合・論証）。
 
 ### ★巻末の書式は av_report が機械で突合する（2026-08-19・省略禁止）
 
