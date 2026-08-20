@@ -35,6 +35,13 @@ REQUIRED = {
     "step5_structure": "ステップ5の承認ターン②（テスト構成）",
 }
 
+# 2026-08-20 追加（専務指示）＝難易度の構成比（recall/select/construct の設問数と比率）も
+# 承認ターンにする。ただし既に配信済みの模試（この欄が無い）を配信不能にしないため、
+# 欠けていても止めず [警告] を出す。新しく作る模試には必ず入れること。
+WARN_ONLY = {
+    "step5b_difficulty": "ステップ5.6の承認ターン③（難易度の構成比 recall/select/construct）",
+}
+
 
 def main():
     if len(sys.argv) < 2:
@@ -73,6 +80,15 @@ def main():
                 ng = True
             else:
                 print(f"  [OK] {label} 承認済み")
+
+    for key, label in WARN_ONLY.items():
+        blk = ap.get(key)
+        if not isinstance(blk, dict) or blk.get("approved") is not True:
+            print(f"  [警告] approvals.{key} が無い ＝ {label} を実施していない。"
+                  "新規に作る模試では、HTML生成の前に load の内訳（設問数と%）を表で提示し、"
+                  "承認を得てから記録すること（2026-08-20 専務指示）")
+        else:
+            print(f"  [OK] {label} 承認済み")
 
     if ng:
         print("----")
