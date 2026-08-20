@@ -57,7 +57,10 @@ fi
   # rclone を実行し、成否をログに「正直に」記録する（失敗を「成功」と書かない）。
   # 旧版は exit code を見ずに必ず「アップロードしました」と書いていたため、
   # 機密データの同期が失敗しても気づけなかった（2026-06-18 改修）。
-  # 使い方: run_rclone "ラベル" sync $RFLAGS 送信元 送信先
+  # 使い方: run_rclone "ラベル" copy $RFLAGS --update 送信元 送信先
+  # ★sync（ミラー）は使わない（2026-08-20 改修）。sync は「送信先にあって送信元に無いファイル」を
+  # 消すため、片方のPCが欠けた状態でアップロードすると、もう片方のPCが作った記録がDriveから消える。
+  # 実際に労災ケースの原本が1件消えた。copy + --update なら削除は伝播せず、新しい方だけが残る。
   run_rclone() {
     local label="$1"; shift
     rclone "$@" 2>> "$LOG_FILE"
@@ -74,7 +77,7 @@ fi
   # メモリフォルダごとアップロード（MEMORY.md + 個別メモリファイル全て）
   MEMORY_DIR=$(ls -d "$HOME/.claude/projects/"*/memory 2>/dev/null | head -1)
   if [ -d "$MEMORY_DIR" ]; then
-    run_rclone "memoryフォルダ" sync $RFLAGS "$MEMORY_DIR" "$GDRIVE_FOLDER/memory/"
+    run_rclone "memoryフォルダ" copy $RFLAGS --update "$MEMORY_DIR" "$GDRIVE_FOLDER/memory/"
   fi
 
   # processed_ids.json をアップロード（ブックマーク処理済みリストをPC間で共有）
@@ -93,7 +96,7 @@ fi
   SALES_PROJECT="$HOME/mino-sakura-hq"
   SECRETS_HR="$SALES_PROJECT/secrets/hr"
   if [ -d "$SECRETS_HR" ]; then
-    run_rclone "secrets/hr（機密）" sync $RFLAGS "$SECRETS_HR/" "$GDRIVE_FOLDER/secrets-hr/"
+    run_rclone "secrets/hr（機密）" copy $RFLAGS --update "$SECRETS_HR/" "$GDRIVE_FOLDER/secrets-hr/"
   fi
 
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] アップロード完了(背景)" >> "$LOG_FILE"

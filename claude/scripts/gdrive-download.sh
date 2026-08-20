@@ -19,7 +19,7 @@ if [ -z "$MEMORY_DIR" ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] memoryディレクトリが見つかりません" >> "$LOG_FILE"
   exit 1
 fi
-rclone sync "$GDRIVE_FOLDER/memory/" "$MEMORY_DIR/" 2>> "$LOG_FILE"
+rclone copy "$GDRIVE_FOLDER/memory/" "$MEMORY_DIR/" --update 2>> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] memoryフォルダをダウンロードしました" >> "$LOG_FILE"
 
 
@@ -32,7 +32,7 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] processed_ids.jsonをダウンロードし�
 # basic-memory ノートをダウンロード（セマンティック検索の元データ）
 BASIC_MEMORY_DIR="$HOME/basic-memory"
 mkdir -p "$BASIC_MEMORY_DIR"
-rclone sync "$GDRIVE_FOLDER/basic-memory/" "$BASIC_MEMORY_DIR" 2>> "$LOG_FILE"
+rclone copy "$GDRIVE_FOLDER/basic-memory/" "$BASIC_MEMORY_DIR" --update 2>> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] basic-memoryノートをダウンロードしました" >> "$LOG_FILE"
 
 # 売上明細（生CSV）の仮置場をダウンロード（販売参謀）
@@ -71,7 +71,7 @@ if [ -d "$SALES_PROJECT" ]; then
   # 機密ファイル（secrets/hr/）をダウンロード（社員台帳・有給付与一覧など）
   SECRETS_HR="$SALES_PROJECT/secrets/hr"
   mkdir -p "$SECRETS_HR"
-  rclone sync "$GDRIVE_FOLDER/secrets-hr/" "$SECRETS_HR/" 2>> "$LOG_FILE"
+  rclone copy "$GDRIVE_FOLDER/secrets-hr/" "$SECRETS_HR/" --update 2>> "$LOG_FILE"
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] secrets/hr をダウンロードしました" >> "$LOG_FILE"
 fi
 
