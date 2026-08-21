@@ -77,6 +77,36 @@ def check(json_path, brief_path):
         return 1
 
     print('[OK] 設計ブリーフ（中間本番の分析）を反映した模試であることを確認。')
+
+    # --- 規模の下限照合（2026-08-21 新設・再発防止）---
+    # 背景＝ブリーフに「小問30問前後」と規模が書いてあるのに、承認ターンへ薄い構成
+    # （29問）を出して専務に指摘された。規模は目視でなく機械で照合する。
+    # ブリーフmd自体は sha256 照合の対象なので触らず、同ディレクトリの _scale.json
+    # に教科ごとの下限を持たせる（ブリーフのファイル名=教科名で引く）。
+    # _scale.json が無い／該当教科の記載が無ければスキップ（後方互換）。
+    scale_path = os.path.join(os.path.dirname(os.path.abspath(brief_path)), '_scale.json')
+    if os.path.isfile(scale_path):
+        try:
+            scales = json.load(open(scale_path, encoding='utf-8'))
+        except Exception as e:  # noqa: BLE001
+            print(f'[NG] _scale.json の読み込みに失敗: {e}')
+            return 1
+        key = os.path.splitext(os.path.basename(brief_path))[0]  # 例: 理科
+        min_q = scales.get(key)
+        if min_q:
+            nq = len(doc.get('questions', []))
+            print(f'  規模の下限: {key} min_questions={min_q} / 出題 {nq}問')
+            if nq < int(min_q):
+                print(f'[NG] 小問数 {nq} がブリーフの規模下限 {min_q} を下回る。'
+                      '＝本番・前版に対して薄い模試。'
+                      '高複雑側の問題を足して規模を満たしてから配信すること。')
+                return 1
+            print('[OK] 規模の下限を満たす。')
+        else:
+            print(f'[skip] _scale.json に「{key}」の下限が無い＝規模照合はスキップ。')
+    else:
+        print('[skip] _scale.json が無い＝規模照合はスキップ（後方互換）。')
+
     return 0
 
 
