@@ -12,6 +12,7 @@
     ],
     "defaultMode": "acceptEdits"
   },
+  "model": "opus",
   "hooks": {
     "PreToolUse": [
       {
@@ -215,5 +216,5 @@
     "claude.ai Gmail",
     "claude.ai Google Calendar"
   ],
-  "model": "opus"
+  "agentPushNotifEnabled": true
 }
