@@ -26,15 +26,22 @@
 ■ 教科タイプで主軸を切り替える（difficulty_primary＝トップに宣言）
   "complexity"（計算・複合が作れる教科＝数学・理科計算・英語）
       → 主軸＝①内容の複雑さ。**recall 上限は課さない**（難しい計算は recall で応用）。
-      応用 : 単純(low) ≤ 30% かつ 高複雑(high) ≥ 30% かつ 中+高 ≥ 70%
+      応用 : 単純(low) = 0 かつ 高複雑(high) ≥ 60%（★mid は応用ではない・2026-08-23）
       標準 : 単純(low) ≤ 55% かつ 高複雑(high) ≥ 1問
       ※各問に complexity(low/mid/high) が必須。
+      ※high と付けてよいのは「逆算／差分／統合／多段」のいずれかを含む計算だけ。
+        公式1回の直接適用は low〜mid（＝B・high 水増しの禁止・2026-08-23）。
   "process"（暗記が原子的な教科＝漢字・社会用語・国語文法など）
-      → 主軸＝②思考の種類（複数を関係づける・説明する）。従来どおり。
-      応用 : recall ≤ 30% かつ construct ≥ 15% かつ select+construct ≥ 70%
+      → 主軸＝②思考の種類（複数を関係づける・説明する）。
+      応用 : recall = 0 かつ construct ≥ 40%（★recall は応用ではない・2026-08-23）
       標準 : recall ≤ 55% かつ construct ≥ 1問
       ※各問に load(recall/select/construct) が必須。
   宣言が無いときは "process"（従来挙動）で判定し、[注意] を出して宣言を促す。
+
+★A：応用は選択問題を1問も入れない＝全問「自答式」（2026-08-23 専務指示・徹底）。
+  select（認知＝競合を自分で想起し切り分ける“思想”）と 選択問題（手法＝候補を手渡す再認）は
+  別物・逆向き。応用では format＝選択（記号・二択・組合せ）を検出したら NG（配信拒否）。
+  応用の select は選択肢を渡さず記述で成立させる。
 
 ■ 3区分（②の判定は“頭の中で何が起きるか”。手数は見ない）
     recall    … 使う規則・知識が一つに決まっていて、思い出せば答えが出る。
@@ -75,6 +82,23 @@ COMPLEXITY_ALIASES = {
 # 旧ラベル（手数基準・2026-08-20 に廃止）。見つけたら付け直しを促して停止する。
 OBSOLETE = {"drill", "apply", "think", "ドリル", "応用", "思考", "論証", "統合",
             "一問一答", "用語", "複数ステップ", "条件", "場合分け", "資料", "記述"}
+
+# 出題形式（format）が「選択問題」か（＝選択肢を設問側が手渡して選ばせる形式）。
+# ★応用では選択問題を1問も入れない＝全問「自答式」（2026-08-23 専務指示・徹底）。
+#   手法（選択問題）と思想（select）は別物・逆向き。
+#   ・select＝認知の思想＝競合する既習を“自分で想起して”切り分ける頭の働き（負荷↑）。
+#   ・選択問題＝出題の手法＝候補を手渡すぶん再認になり負荷が下がる。
+#   だから応用の select は「選択肢を渡さず記述（自答）で」成立させる。
+#   「選択問題だから select」は禁止。ここを format で機械的に弾く。
+CHOICE_FORMAT_MARKERS = ("選択", "記号", "二択", "択一", "組合せ", "組み合わせ",
+                         "多肢", "choice", "mc")
+
+
+def is_choice_format(v):
+    if v is None:
+        return False
+    s = str(v).strip().lower()
+    return any(m.lower() in s for m in CHOICE_FORMAT_MARKERS)
 
 
 def norm_load(v):
@@ -155,15 +179,13 @@ def gate_process(qs, bucket):
           f"construct={cs}問({c_pct:.0f}%) / select+construct={sl + cs}問({h_pct:.0f}%) / 設問{nq}問")
     ok = True
     if bucket == "advanced":
-        if r_pct > 30 + 1e-9:
-            print(f"  [NG] 応用なのに recall(想起) が {r_pct:.0f}% ＞ 上限30%。"
-                  "規則を選ばせる／初見の文脈へ移す／説明させる問いに差し替えること")
+        # ★mid（recall）は応用ではない → 応用は recall=0・construct 主体に締める（2026-08-23）。
+        if rc > 0:
+            print(f"  [NG] 応用なのに recall(想起) が {rc}問（{r_pct:.0f}%）。"
+                  "応用は recall=0。規則を選ばせる／初見の文脈へ移す／説明させる問いに差し替えること")
             ok = False
-        if c_pct < 15 - 1e-9:
-            print(f"  [NG] 応用なのに construct(構成・説明) が {c_pct:.0f}% ＜ 下限15%")
-            ok = False
-        if h_pct < 70 - 1e-9:
-            print(f"  [NG] 応用なのに select+construct が {h_pct:.0f}% ＜ 下限70%")
+        if c_pct < 40 - 1e-9:
+            print(f"  [NG] 応用なのに construct(構成・説明) が {c_pct:.0f}% ＜ 下限40%")
             ok = False
     elif bucket == "standard":
         if r_pct > 55 + 1e-9:
@@ -200,16 +222,14 @@ def gate_complexity(qs, bucket):
           f"high={hi}問({hi_pct:.0f}%) / mid+high={mi + hi}問({mh_pct:.0f}%) / 設問{nq}問")
     ok = True
     if bucket == "advanced":
-        if lo_pct > 30 + 1e-9:
-            print(f"  [NG] 応用なのに 単純(low) が {lo_pct:.0f}% ＞ 上限30%。"
-                  "内容そのものを難しくする（項数・負×分数×かっこの複合・多段）こと")
+        # ★mid は応用ではない → 応用は low=0・high 主体（≥60%）に締める（2026-08-23 専務指示）。
+        if lo > 0:
+            print(f"  [NG] 応用なのに 単純(low) が {lo}問（{lo_pct:.0f}%）。"
+                  "応用は low=0。内容そのものを難しくする（逆算・差分・統合・多段）こと")
             ok = False
-        if hi_pct < 30 - 1e-9:
-            print(f"  [NG] 応用なのに 高複雑(high) が {hi_pct:.0f}% ＜ 下限30%。"
-                  "余計な手間(外在的負荷)ではなく、要素相互作用性を上げること")
-            ok = False
-        if mh_pct < 70 - 1e-9:
-            print(f"  [NG] 応用なのに 中+高 が {mh_pct:.0f}% ＜ 下限70%")
+        if hi_pct < 60 - 1e-9:
+            print(f"  [NG] 応用なのに 高複雑(high) が {hi_pct:.0f}% ＜ 下限60%。"
+                  "余計な手間(外在的負荷)ではなく、要素相互作用性（逆算・差分・統合・多段）を上げること")
             ok = False
     elif bucket == "standard":
         if lo_pct > 55 + 1e-9:
@@ -239,6 +259,19 @@ def main():
     if bucket == "kihon":
         print("  [skip] level=基本 は易問中心が正しいため難易度構成は検査しない")
         sys.exit(0)
+
+    # ★A：応用に選択問題を1問も入れない＝全問「自答式」（2026-08-23 専務指示・徹底）。
+    #   select（認知＝競合を自分で想起し切り分ける）と選択問題（手法＝候補を手渡す再認）は
+    #   別物・逆向き。応用の select は選択肢を渡さず記述で成立させる。format で機械的に弾く。
+    if bucket == "advanced":
+        choice_qs = [q.get("mondai_id", "?") for q in qs if is_choice_format(q.get("format"))]
+        if choice_qs:
+            print(f"  [NG] 応用に選択問題が {len(choice_qs)}問ある（応用は全問=自答式）: "
+                  + " ".join(str(m) for m in choice_qs[:20]))
+            print("       選択肢を渡す形式（二択・記号選択・組合せ）は応用では禁止。"
+                  "候補を渡さず自分で答えを書かせる問いに差し替えること。"
+                  "（select は選択問題ではなく、競合を自力で切り分ける“思想”）")
+            sys.exit(1)
 
     axis = primary_axis(d)
     if axis is None:
