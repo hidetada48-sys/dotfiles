@@ -93,6 +93,57 @@ OBSOLETE = {"drill", "apply", "think", "ドリル", "応用", "思考", "論証"
 CHOICE_FORMAT_MARKERS = ("選択", "記号", "二択", "択一", "組合せ", "組み合わせ",
                          "多肢", "choice", "mc")
 
+# ★第4次改修（2026-08-23）：応用の「認知の本物さ」を客観フィールドで担保する。
+#   これまでの穴＝ラベル(select/construct)は自己申告で、易問にも貼れた（＝ニセselect/ニセconstruct）。
+#   例：「南極が寒帯なのはなぜ？→極に近いから」は“説明”の形でも単一事実の想起＝実質recall。
+#      住居と気候帯を「対応させる」も覚えた対を引くだけ＝実質recall。ゲートは分布は見るがラベルの
+#      正直さを見られなかった。そこで complexity=high で効いた「客観的な構造下限を機械で課す」やり方を
+#      select/construct にも横展開する。応用の select/construct には各問が次の2フィールドを宣言し、
+#      機械が下限として照合する（宣言そのものが設計シートに出るので“盛り”は人/AVにも見える）。
+#     answer_mode … 答えの出し方。"retrieve"＝単一の記憶を引く(実質recall)／
+#                   "derive"＝複数を結び、因果・比較・多段で組み立てる／
+#                   "transfer"＝既習の原理を初見の場面に当てはめる。応用は derive/transfer のみ。
+#     links       … 答えが結びつける“distinctな要素”の列挙。応用の select/construct は2つ以上必須
+#                   （単一事実で完結＝recall）。select は「自分で呼び出して競合させる2つ以上の既習＋
+#                   見分ける観点」を links に書く（候補を手渡さず、生徒が想起して切り分ける）。
+MODE_ALIASES = {
+    "retrieve": "retrieve", "想起": "retrieve", "思い出す": "retrieve", "記憶": "retrieve", "再生": "retrieve",
+    "derive": "derive", "導出": "derive", "構成": "derive", "組み立て": "derive", "説明": "derive", "比較": "derive",
+    "transfer": "transfer", "転移": "transfer", "初見": "transfer", "当てはめ": "transfer", "応用": "transfer",
+}
+
+
+def norm_mode(v):
+    if v is None:
+        return None
+    s = str(v).strip()
+    return MODE_ALIASES.get(s.lower()) or MODE_ALIASES.get(s)
+
+
+def genuine_advanced_violations(qs):
+    """応用の select/construct が“本物”か（実質recallの詐称でないか）を客観フィールドで検査。
+       対象＝load が select/construct の設問（recall は応用では別途0本が要求される）。
+       返り値＝NG理由の行リスト（空なら合格）。"""
+    bad = []
+    for q in qs:
+        if norm_load(q.get("load")) not in ("select", "construct"):
+            continue
+        qid = q.get("mondai_id", "?")
+        mode = norm_mode(q.get("answer_mode"))
+        links = q.get("links")
+        if mode is None or links is None:
+            bad.append(f"    ・{qid}：answer_mode / links 未宣言"
+                       "（応用の select/construct は必須＝これが無いとニセ応用を弾けない）")
+            continue
+        if mode == "retrieve":
+            bad.append(f"    ・{qid}：answer_mode=retrieve＝答えを“思い出す”だけ＝実質recall。"
+                       "導出(derive)か転移(transfer)で成立する問いへ差し替えること")
+        if not isinstance(links, (list, tuple)) or len(links) < 2:
+            n = len(links) if isinstance(links, (list, tuple)) else 0
+            bad.append(f"    ・{qid}：links が{n}個＝単一事実で完結＝実質recall。"
+                       "複数を結びつける／初見に当てはめる問い（links2つ以上）にすること")
+    return bad
+
 
 def is_choice_format(v):
     if v is None:
@@ -186,6 +237,16 @@ def gate_process(qs, bucket):
             ok = False
         if c_pct < 40 - 1e-9:
             print(f"  [NG] 応用なのに construct(構成・説明) が {c_pct:.0f}% ＜ 下限40%")
+            ok = False
+        # ★第4次改修：ラベルの正直さを客観フィールドで担保（ニセselect/ニセconstructを弾く）。
+        viol = genuine_advanced_violations(qs)
+        if viol:
+            print("  [NG] 応用の select/construct に“ニセ応用”（実質recall）がある"
+                  "＝answer_mode/links で不合格:")
+            for line in viol[:30]:
+                print(line)
+            print("       応用の本質＝答えを『思い出す』でなく『作る／導く』・単一事実で完結しない"
+                  "（複数を結びつける／初見に当てはめる／逆にして産出させる）。")
             ok = False
     elif bucket == "standard":
         if r_pct > 55 + 1e-9:

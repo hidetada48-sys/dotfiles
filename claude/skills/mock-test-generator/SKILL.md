@@ -341,8 +341,9 @@ JSONがない場合はこの軸はスキップする。
 - **暗記が原子的な教科（漢字・社会用語・国語文法）**＝**②思考の種類が主**。
   1項目を複雑にできない（漢字は書けるか否か）ので、**複数を関係づける・説明させる**で上げる。
 
-②の3区分：**規則を自分で選ぶ(select)**／**2つ以上を関係づける(select)**／
-**初見の文脈へ移す・なぜそうなるかを説明する(construct)**（Bloom改訂版・SOLO・転移の距離）。
+②の3区分（**厳密な定義と機械照合は §A-2**）：**規則を自分で選ぶ・2つ以上を関係づける(select)**／
+**初見の文脈へ移す・2つ以上を因果でつなぐ(construct)**。
+★**単一事実の"なぜ"や1対1の"対応"は、"説明/対応"の形式でも recall**（§A-2で機械的に弾く）。
 
 **やってはいけない上げ方**：**外在的負荷（余計な手間＝busywork）を増やす**
 （「2文に共通して入る1語」など。手数が増えてもやることが想起なら難易度は上がらない＝2026-08-20 の失敗）／
@@ -380,6 +381,33 @@ JSONがない場合はこの軸はスキップする。
 `recall/select/construct` は**認知の軸**として残す。**出題形式は応用では自答式に固定**（選択形式は基礎・標準まで）。
 機械ゲート＝`check_difficulty.py` が level=応用 で `format`＝選択（記号・二択・組合せ）を検出したら **NG（配信拒否）**。
 **ただし「特徴・定義の埋め込み」は機械では捉えきれない**（意味の問題）＝**設問を書くたびに「答えの決め手を設問に書いていないか」を自分で点検する**。難易度アンカーのすり合わせ（ステップ3）と answer-validator でも見る。
+
+#### ★A-2：応用の「本物さ」を客観フィールドで担保＝ニセselect/ニセconstructを機械で弾く（2026-08-23 第4次改修）
+
+§A の一段深い穴＝**ラベル（select/construct）は自己申告で、易問にも貼れた**。ゲートは分布は見るが
+ラベルの正直さを見られなかった（2026-08-23 地理ver2で、対応・単一事実の"なぜ"に construct/select を貼って通した）。
+そこで complexity=high の客観下限（逆算/差分/統合/多段）と同じ発想を、select/construct にも課す。
+
+**3語を「答えの出し方」で定義し直す（"説明"や"対応"という"形式"で応用と判断しない）：**
+- **recall（想起）**＝答えが**単一の記憶を引く**だけで出る。**"説明しなさい"でも中身が単一事実なら recall**
+  （×「南極が寒帯なのはなぜ→極に近く寒いから」＝覚えた1事実／×「住居と気候帯を対応させよ」＝覚えた対を引く）。
+  何手かかっても、思い出すだけなら recall。**応用では recall=0。**
+- **select（判別）**＝**競合する2つ以上の既習を、生徒が自分で呼び出し、見分ける観点を自分で立てて**切り分ける
+  （候補を手渡さない・1対1の対応でもない）。例：「乾燥帯と寒帯は雨温図で降水が似る。何を手がかりに見分けるか自分で答えよ」。
+- **construct（構成・導出）**＝**初見の場面／条件から答えを組み立てる**か、**2つ以上を因果・比較でつなぐ**。
+  単一事実の"なぜ"は construct ではない。例：「熱帯と寒帯の住居の工夫は正反対。両方あげ、なぜ逆かを説明せよ」。
+
+**★機械で担保（応用の select/construct に必須の客観フィールド。宣言が設計シートに出るので"盛り"は人/AVにも見える）：**
+- `answer_mode`＝ **retrieve（思い出す＝実質recall）／derive（結んで導く）／transfer（初見に当てはめる）**。
+  応用の select/construct は **derive か transfer のみ**（retrieve は不可）。
+- `links`＝ 答えが**結びつける distinct な要素の列挙（2つ以上必須）**。select は「自分で呼び出す2つ以上＋見分ける観点」を書く。
+  **1つ＝単一事実＝recall として弾く。**
+- 出題履歴JSONの各問に `answer_mode`・`links` を持たせる。`check_difficulty.py` が level=応用/process で
+  **select/construct に answer_mode∈{derive,transfer} かつ links≥2** を機械照合し、満たさなければ **NG（配信拒否）**。
+  `build_design_sheet.py` も同じ関数で承認ターンに表示（シート緑＝配信緑）。
+
+**★応用の一行判定＝「答えを思い出せば書けるか？」→YESなら応用でない。**
+思い出すのでなく**作る／導く（複数を結ぶ・初見に当てはめる・逆にして産出させる）**しかない問いだけが応用。
 
 #### ★B：`complexity=high` の客観下限＝high 計算の水増しを禁止（2026-08-23）
 
@@ -917,6 +945,8 @@ HTMLと同じフォルダに出力する（`json.dump(..., ensure_ascii=False, i
       "difficulty": 0,
       "load": "recall / select / construct",
       "complexity": "low / mid / high",
+      "answer_mode": "retrieve / derive / transfer",
+      "links": ["結ぶ要素1", "結ぶ要素2"],
       "point": 2,
       "pitfall": "狙うつまずき（常設カタログ記号＋単元固有）。無ければ \"なし（知識確認）\""
     }
@@ -929,6 +959,9 @@ HTMLと同じフォルダに出力する（`json.dump(..., ensure_ascii=False, i
 　 未宣言なら process（従来挙動）＋[注意]。`check_difficulty.py` がこの値で判定軸を切り替える。
 ※ `complexity`（low/mid/high）＝**内容の要素相互作用性**。**difficulty_primary=complexity の教科は全設問に必須**。
 　 process 教科でも付けてよい（判定は load を使う）。
+※ `answer_mode`（retrieve/derive/transfer）・`links`（結ぶ要素の列挙）＝**§A-2 の"本物さ"担保。level=応用/process の
+　 select・construct 設問は必須**。応用は answer_mode∈{derive,transfer}・links≥2 でないと `check_difficulty.py` が NG（配信拒否）。
+　 recall 設問と標準以下では不要。単一事実の想起や1対1の対応に construct/select を貼ると links1つ/retrieve で弾かれる。
 
 ※ `total_points`・各設問の `point` は**必須**（2026-08-18）。配信前の `run_checks.sh` の配点検算が
 　 **`questions[].point` の合計 == `total_points`** を機械で照合する（合わなければ配信不可）。

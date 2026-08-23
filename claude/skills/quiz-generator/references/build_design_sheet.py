@@ -112,10 +112,25 @@ def build(data):
                  if level == "応用" else [])
     ok_choice = (len(choice_qs) == 0)
 
+    # ★第4次改修：応用の select/construct が“本物”か（answer_mode/links）を、
+    #   check_difficulty.py の同一関数で判定（自前しきい値のドリフトを防ぐ・シート緑＝配信緑）。
+    genuine_bad = []
+    if level == "応用" and primary != "complexity":
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from check_difficulty import genuine_advanced_violations
+            norm = [{"mondai_id": q.get("id", "?"), "load": q.get("load"),
+                     "answer_mode": q.get("answer_mode"), "links": q.get("links")} for q in allq]
+            genuine_bad = genuine_advanced_violations(norm)
+        except Exception as e:
+            genuine_bad = [f"    ・検査不能: {e}"]
+    ok_genuine = (len(genuine_bad) == 0)
+
     return dict(allq=allq, n=n, pts=pts, tm=tm, dist=dist, src=src, primary=primary,
                 level=level, T=T, dkey=dkey, ok_pts=ok_pts, ok_time=ok_time,
                 passed=passed, min_q=min_q, ok_scale=ok_scale, tp=tp, tl=tl,
-                choice_qs=choice_qs, ok_choice=ok_choice)
+                choice_qs=choice_qs, ok_choice=ok_choice,
+                genuine_bad=genuine_bad, ok_genuine=ok_genuine)
 
 
 def mark(ok):
@@ -172,6 +187,10 @@ def render(data, s):
                   else f'選択問題 {len(cq)}問（{escape("、".join(str(x) for x in cq[:10]))}）')
         out.append(f'<div class="card"><h3>応用の自答式（選択問題ゼロ）{mark(s["ok_choice"])}</h3>'
                    f'<div class="sm">{detail}<br>応用は選択肢を渡さない（selectは記述で成立）</div></div>')
+        gdetail = ("本物（想起でなく導出/転移・複数を結合）" if s["ok_genuine"]
+                   else f'ニセ応用 {len(s["genuine_bad"])}件（answer_mode/links 不足）')
+        out.append(f'<div class="card"><h3>応用の本物さ（mode/links）{mark(s["ok_genuine"])}</h3>'
+                   f'<div class="sm">{gdetail}<br>単一事実の想起は応用でない（複数を結ぶ／初見に当てはめる）</div></div>')
     sc = (f'下限{s["min_q"]} ≤ {s["n"]}問' if s["min_q"] is not None else f'{s["n"]}問（下限定義なし）')
     out.append(f'<div class="card"><h3>規模</h3><div class="big">{s["n"]}問</div>'
                f'<div class="sm">{sc}　{mark(s["ok_scale"])}</div></div>')
@@ -192,7 +211,14 @@ def render(data, s):
             no += 1
             lab = q.get(s["dkey"], "")
             cls = f'cx-{lab}' if s["primary"] == "complexity" else ''
-            out.append(f'<tr><td class="n">{no}</td><td>{escape(str(q.get("brief","")))}</td>'
+            # 応用の select/construct は「認知の担保」（mode＋結びつける要素）を明示＝盛りを見えるようにする
+            ml = ""
+            if s["level"] == "応用" and s["primary"] != "complexity" and q.get("load") in ("select", "construct"):
+                lk = q.get("links")
+                lkstr = "・".join(str(x) for x in lk) if isinstance(lk, (list, tuple)) else str(lk or "—")
+                ml = (f'<br><span style="color:#888;font-size:9pt">〔{escape(str(q.get("answer_mode","?")))}'
+                      f'／結合: {escape(lkstr)}〕</span>')
+            out.append(f'<tr><td class="n">{no}</td><td>{escape(str(q.get("brief","")))}{ml}</td>'
                        f'<td class="c">{escape(str(q.get("format","")))}</td>'
                        f'<td class="c">{q["point"]}</td>'
                        f'<td class="c {cls}">{escape(lab)}</td>'
@@ -225,6 +251,13 @@ def main():
     print(f"  難易度({s['primary']}/{s['level']}) {dbits}: {'OK' if s['passed'] else 'NG'}")
     if s["level"] == "応用":
         print(f"  応用の自答式（選択問題ゼロ）: {'OK' if s['ok_choice'] else 'NG（選択問題=' + str(len(s['choice_qs'])) + '問）'}")
+        if s["primary"] != "complexity":
+            if s["ok_genuine"]:
+                print("  応用の本物さ（mode/links）: OK（想起でなく導出/転移・複数を結合）")
+            else:
+                print(f"  応用の本物さ（mode/links）: NG（ニセ応用 {len(s['genuine_bad'])}件）")
+                for line in s["genuine_bad"][:30]:
+                    print(line)
     return 0
 
 
