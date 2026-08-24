@@ -105,13 +105,24 @@ def build(data):
     min_q = load_scale(brief_dir, scale_key)
     ok_scale = (min_q is None) or (n >= int(min_q))
 
-    # ★A：応用は選択問題を1問も入れない＝全問「自答式」（2026-08-23）。
-    #   check_difficulty.py と同じ format 判定でここでも可視化する（シート緑＝配信緑を保つ）。
-    _CHOICE = ("選択", "記号", "二択", "択一", "組合せ", "組み合わせ", "多肢", "choice", "mc")
-    choice_qs = ([q.get("id", "?") for q in allq
-                  if any(m.lower() in str(q.get("format", "")).lower() for m in _CHOICE)]
-                 if level == "応用" else [])
+    # ★A（2026-08-24 第5次改修に追随）：応用で禁止するのは「純二択（○×・正誤・2択）」だけ。
+    #   選択問題そのもの（誤り選び・並べ替え・3択以上）はヒントが無ければ可＝ここでも
+    #   check_difficulty.py の同一関数 is_binary_format で判定する（シート緑＝配信緑・ドリフト防止）。
+    #   ヒントの有無は下の「設問文の点検」（check_hint 由来）が別途担保する。
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from check_difficulty import is_binary_format
+        choice_qs = ([q.get("id", "?") for q in allq
+                      if is_binary_format(q.get("format"))]
+                     if level == "応用" else [])
+    except Exception:
+        choice_qs = []
     ok_choice = (len(choice_qs) == 0)
+    # 参考表示用＝選択形式（純二択以外も含む）の件数。禁止ではなく可視化のみ。
+    _SEL = ("選択", "記号", "誤り選び", "並べ替え", "並べかえ", "択一", "組合せ",
+            "組み合わせ", "多肢", "choice")
+    sel_qs = [q.get("id", "?") for q in allq
+              if any(m.lower() in str(q.get("format", "")).lower() for m in _SEL)]
 
     # ★第4次改修：応用の select/construct が“本物”か（answer_mode/links）を、
     #   check_difficulty.py の同一関数で判定（自前しきい値のドリフトを防ぐ・シート緑＝配信緑）。
@@ -154,7 +165,7 @@ def build(data):
                 undeclared=undeclared, ok_prompt=ok_prompt,allq=allq, n=n, pts=pts, tm=tm, dist=dist, src=src, primary=primary,
                 level=level, T=T, dkey=dkey, ok_pts=ok_pts, ok_time=ok_time,
                 passed=passed, min_q=min_q, ok_scale=ok_scale, tp=tp, tl=tl,
-                choice_qs=choice_qs, ok_choice=ok_choice,
+                choice_qs=choice_qs, ok_choice=ok_choice, sel_qs=sel_qs,
                 genuine_bad=genuine_bad, ok_genuine=ok_genuine)
 
 
@@ -208,10 +219,11 @@ def render(data, s):
                f'<div class="sm">{dbits}<br>基準：{escape(rule)}</div></div>')
     if s["level"] == "応用":
         cq = s["choice_qs"]
-        detail = ("全問自答式" if s["ok_choice"]
-                  else f'選択問題 {len(cq)}問（{escape("、".join(str(x) for x in cq[:10]))}）')
-        out.append(f'<div class="card"><h3>応用の自答式（選択問題ゼロ）{mark(s["ok_choice"])}</h3>'
-                   f'<div class="sm">{detail}<br>応用は選択肢を渡さない（selectは記述で成立）</div></div>')
+        nsel = len(s.get("sel_qs", []))
+        detail = (f'純二択なし（選択問題 {nsel}問はヒント検査で担保）' if s["ok_choice"]
+                  else f'純二択 {len(cq)}問（{escape("、".join(str(x) for x in cq[:10]))}）')
+        out.append(f'<div class="card"><h3>応用の形式（純二択のみ禁止）{mark(s["ok_choice"])}</h3>'
+                   f'<div class="sm">{detail}<br>選択問題は可・純二択（○×/正誤/2択）だけ不可</div></div>')
         gdetail = ("本物（想起でなく導出/転移・複数を結合）" if s["ok_genuine"]
                    else f'ニセ応用 {len(s["genuine_bad"])}件（answer_mode/links 不足）')
         out.append(f'<div class="card"><h3>応用の本物さ（mode/links）{mark(s["ok_genuine"])}</h3>'
@@ -305,7 +317,8 @@ def main():
               f"（申告 {len(s['declared'])}件・未申告 {len(s['undeclared'])}件）"
               f": {'OK' if s['ok_prompt'] else 'NG'}")
     if s["level"] == "応用":
-        print(f"  応用の自答式（選択問題ゼロ）: {'OK' if s['ok_choice'] else 'NG（選択問題=' + str(len(s['choice_qs'])) + '問）'}")
+        nsel = len(s.get("sel_qs", []))
+        print(f"  応用の形式（純二択のみ禁止）: {'OK（選択問題' + str(nsel) + '問・純二択0）' if s['ok_choice'] else 'NG（純二択=' + str(len(s['choice_qs'])) + '問）'}")
         if s["primary"] != "complexity":
             if s["ok_genuine"]:
                 print("  応用の本物さ（mode/links）: OK（想起でなく導出/転移・複数を結合）")
