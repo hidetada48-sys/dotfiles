@@ -23,6 +23,7 @@ HTMLと違う"きれいな文"を書けてしまうため、JSONの prompt とHT
 
 終了コード: level=応用 で違反があれば 1、それ以外は 0（標準・基本は件数を表示するだけ）。
 """
+import html as _html
 import json
 import re
 import sys
@@ -60,8 +61,9 @@ def strip_tags(x):
 
 
 def norm(s):
-    """比較用の正規化（空白・全角空白・改行を落とす）。"""
-    return re.sub(r"[\s\u3000]+", "", strip_tags(s))
+    """比較用の正規化（実体参照を戻し、空白・全角空白・改行を落とす）。
+       ★HTMLでは don't が don&#x27;t になる＝unescape しないと必ず不一致（2026-08-24 実測）。"""
+    return re.sub(r"[\s\u3000]+", "", _html.unescape(strip_tags(s)))
 
 
 def extract_questions(html):
@@ -75,7 +77,7 @@ def extract_questions(html):
         for q in re.findall(r'<p class=["\']q["\']>(.*?)</p>', sec, re.S):
             n = re.search(r'<span class=["\']qn["\']>\((\d+)\)</span>', q)
             kn = n.group(1) if n else "?"
-            text = strip_tags(re.sub(r'<span class=["\']qn["\']>.*?</span>', "", q, flags=re.S))
+            text = _html.unescape(strip_tags(re.sub(r'<span class=["\']qn["\']>.*?</span>', "", q, flags=re.S)))
             text = re.sub(r"[\s\u3000]+", " ", text).strip()
             out.append((f"大問{dm}({kn})", text))
     return out
