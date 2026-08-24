@@ -31,6 +31,7 @@
 """
 import json
 import os
+import re
 import sys
 from collections import Counter
 from html import escape
@@ -126,7 +127,31 @@ def build(data):
             genuine_bad = [f"    ・検査不能: {e}"]
     ok_genuine = (len(genuine_bad) == 0)
 
-    return dict(allq=allq, n=n, pts=pts, tm=tm, dist=dist, src=src, primary=primary,
+    # ★2026-08-24：設問文そのものを承認ターンで点検する（要約=brief だけを見せていたため、
+    #   文言に混入したヒントが承認の場に出ず、専務が解いて初めて見つかる状態だった）。
+    #   判定語は check_hint.py から取り込む（配信ゲートと同じ目で見る＝ドリフト防止）。
+    no_prompt, hint_hits, declared = [], [], []
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from check_hint import VIEWPOINT_PATTERNS, COUNT_PATTERNS
+        for q in allq:
+            qid = q.get("id", "?")
+            text = str(q.get("prompt") or "")
+            if not text:
+                no_prompt.append(qid)
+                continue
+            hits = [pt for pt in (VIEWPOINT_PATTERNS + COUNT_PATTERNS) if re.search(pt, text)]
+            if hits:
+                hint_hits.append(qid)
+            if str(q.get("hint_reason") or "").strip():
+                declared.append(qid)
+    except Exception as e:
+        no_prompt = [f"検査不能: {e}"]
+    undeclared = [x for x in hint_hits if x not in declared]
+    ok_prompt = (len(no_prompt) == 0 and len(undeclared) == 0)
+
+    return dict(no_prompt=no_prompt, hint_hits=hint_hits, declared=declared,
+                undeclared=undeclared, ok_prompt=ok_prompt,allq=allq, n=n, pts=pts, tm=tm, dist=dist, src=src, primary=primary,
                 level=level, T=T, dkey=dkey, ok_pts=ok_pts, ok_time=ok_time,
                 passed=passed, min_q=min_q, ok_scale=ok_scale, tp=tp, tl=tl,
                 choice_qs=choice_qs, ok_choice=ok_choice,
@@ -197,6 +222,11 @@ def render(data, s):
     srcs = "／".join(f'{k}{s["src"].get(k,0)}件' for k in "③④⑤")
     out.append(f'<div class="card"><h3>由来（③間違い ④落とし穴 ⑤ブリーフ）</h3>'
                f'<div class="sm">{srcs}</div></div>')
+    pm = (f'ヒント語 {len(s["hint_hits"])}件（申告 {len(s["declared"])}件・'
+          f'未申告 {len(s["undeclared"])}件）' if not s["no_prompt"]
+          else f'設問文(prompt)未記載 {len(s["no_prompt"])}件')
+    out.append(f'<div class="card"><h3>設問文の点検</h3><div class="sm">{escape(pm)}　'
+               f'{mark(s["ok_prompt"])}</div></div>')
     out.append('</div>')
 
     # 大問ごとの小問明細（通しNo.）
@@ -218,7 +248,26 @@ def render(data, s):
                 lkstr = "・".join(str(x) for x in lk) if isinstance(lk, (list, tuple)) else str(lk or "—")
                 ml = (f'<br><span style="color:#888;font-size:9pt">〔{escape(str(q.get("answer_mode","?")))}'
                       f'／結合: {escape(lkstr)}〕</span>')
-            out.append(f'<tr><td class="n">{no}</td><td>{escape(str(q.get("brief","")))}{ml}</td>'
+            # ★2026-08-24：要約(brief)ではなく設問文の全文を出す。ヒントは文言に混入するため、
+            #   要約を見せている限り承認の場では見つけられない。
+            prompt = str(q.get("prompt") or "")
+            if prompt:
+                body = (f'{escape(prompt)}'
+                        f'<br><span style="color:#888;font-size:9pt">〔要約〕'
+                        f'{escape(str(q.get("brief","")))}</span>')
+            else:
+                body = (f'{escape(str(q.get("brief","")))}'
+                        f'<br><span style="color:#c0142b;font-size:9pt">※設問文(prompt)未記載</span>')
+            hr = str(q.get("hint_reason") or "").strip()
+            if hr:
+                body += (f'<br><span style="color:#b06a00;font-size:9pt">〔観点を足した理由〕'
+                         f'{escape(hr)}</span>')
+            ac = q.get("answer_core")
+            if ac:
+                acs = "・".join(str(x) for x in ac) if isinstance(ac, (list, tuple)) else str(ac)
+                body += (f'<br><span style="color:#888;font-size:9pt">〔採点の合格条件〕'
+                         f'{escape(acs)}</span>')
+            out.append(f'<tr><td class="n">{no}</td><td>{body}{ml}</td>'
                        f'<td class="c">{escape(str(q.get("format","")))}</td>'
                        f'<td class="c">{q["point"]}</td>'
                        f'<td class="c {cls}">{escape(lab)}</td>'
@@ -249,6 +298,12 @@ def main():
     print(f"  配点 {s['pts']}/{s['tp']}: {'OK' if s['ok_pts'] else 'NG'} / 時間 {s['tm']}/{s['tl']}: {'OK' if s['ok_time'] else 'NG'}")
     dbits = " ".join(f"{k}{s['dist'][k]}" for k in s["T"]["keys"])
     print(f"  難易度({s['primary']}/{s['level']}) {dbits}: {'OK' if s['passed'] else 'NG'}")
+    if s["no_prompt"]:
+        print(f"  設問文の点検: NG（prompt 未記載 {len(s['no_prompt'])}件＝承認に全文を出せない）")
+    else:
+        print(f"  設問文の点検: ヒント語 {len(s['hint_hits'])}件"
+              f"（申告 {len(s['declared'])}件・未申告 {len(s['undeclared'])}件）"
+              f": {'OK' if s['ok_prompt'] else 'NG'}")
     if s["level"] == "応用":
         print(f"  応用の自答式（選択問題ゼロ）: {'OK' if s['ok_choice'] else 'NG（選択問題=' + str(len(s['choice_qs'])) + '問）'}")
         if s["primary"] != "complexity":

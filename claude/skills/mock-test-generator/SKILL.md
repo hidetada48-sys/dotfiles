@@ -457,7 +457,11 @@ JSONがない場合はこの軸はスキップする。
 
 ### 手順
 1. コア項目・大問構成・配点・各小問の難易度(load/complexity)・つまずき・由来を組み立て、
-   **設計データJSON**（承認用の一次ソース）に落とす。スキーマは
+   **設計データJSON**（承認用の一次ソース）に落とす。
+   **★設問文は `prompt` に全文で書く（2026-08-24 必須化）。** 要約(`brief`)だけで承認を取らない
+   ——ヒントは要約ではなく**文言に混入**するため、要約を見せている限り承認の場では見つからず、
+   専務が解いて初めて見つかる（2026-08-23 地理ver2＝34問中17問に観点の手渡しが残った）。
+   設計シートは `prompt` を主として表示し、`hint_reason`・`answer_core` も併記する。スキーマは
    `~/.claude/skills/quiz-generator/references/build_design_sheet.py` の docstring 参照。
    `brief_dir` に `holiday/期末模試_設計ブリーフ` を、`scale_key` に教科名を入れる（規模照合用）。
 2. **統合設計シートHTMLを生成**する：
@@ -846,8 +850,19 @@ bash ~/.claude/skills/quiz-generator/references/run_checks.sh <出力HTML> <出�
 ```
 
 - `run_checks.sh` は中で `check_coverage.py`（出題履歴JSONは自動スキップ）→ `check_leak.py`
-  → **`check_pitfalls.py`** → 配点検算 → 承認検査 → **`check_difficulty.py`** を順に実行し、
-  失敗した時点で止まる（＝ハード関門）。
+  → **`check_hint.py`** → **`check_pitfalls.py`** → 配点検算 → 承認検査 → **`check_difficulty.py`**
+  を順に実行し、失敗した時点で止まる（＝ハード関門）。
+- **`check_hint.py`（設問文のヒント検査・2026-08-24 新設）** は、**配信するHTMLそのものから
+  設問文を取り出して**読む唯一の関門。〔1〕観点の手渡し（「〜にふれて」「〜から説明」
+  「〜の読み取りから」等）〔2〕**`answer_core` の語が設問文にある**〔3〕個数の先出し
+  （「〜つの区分に分けられる」）〔4〕`hint_reason` の宣言なきヒント、を検査し、
+  **level=応用 は1件でも配信拒否**。JSONの `prompt` とHTML本文の**突合**も行う。
+  ※ なぜHTMLを読むか＝JSONは書き手の自己申告で、HTMLと違う"きれいな文"を書けてしまうため。
+  ※ 従来 `check_leak.py` も設問文を読んでいたが、①終了コードに含めない設計で無効化されており、
+  　 ②答えの先頭N文字の部分一致方式のため**記述式では当たらない**（全問記述の地理ver2で0件・素通り）。
+- **★専務から設問の指摘を1件受けたら、その1件だけを直さない。** `check_hint.py` を全問に流して
+  **同型が何件あるかを数字で出してから**直す（2026-08-23 は7件の指摘だけを直し、同型17件を
+  残したまま配信した）。報告には検査の出力（件数）をそのまま貼る。
 - `check_pitfalls.py` は出題履歴JSONの**各コア項目に `pitfall` があるか**、巻末に
   「▶よくある誤り」が**罠の数だけ**あるかを見る。**pitfall欠落は配布不可**（罠が無い問は
   `"なし（知識確認）"` と明示。キーごと省くのは不可）。
@@ -940,6 +955,10 @@ HTMLと同じフォルダに出力する（`json.dump(..., ensure_ascii=False, i
   "questions": [
     {
       "mondai_id": "大問1-(1)",
+      "prompt": "設問文の全文（HTMLに印刷したものと同じ文字列）",
+      "answer_core": ["採点の合格条件となる中核語1", "中核語2"],
+      "answer_variants": ["許容する答え方1", "許容する答え方2"],
+      "hint_reason": "（観点・条件を設問に足したときだけ）足した理由",
       "core_item": "コア項目名",
       "format": "選択 / 穴埋め / 記述 / 表 / 図表読み取り など",
       "difficulty": 0,
@@ -963,6 +982,19 @@ HTMLと同じフォルダに出力する（`json.dump(..., ensure_ascii=False, i
 　 select・construct 設問は必須**。応用は answer_mode∈{derive,transfer}・links≥2 でないと `check_difficulty.py` が NG（配信拒否）。
 　 recall 設問と標準以下では不要。単一事実の想起や1対1の対応に construct/select を貼ると links1つ/retrieve で弾かれる。
 
+※ **`prompt`（設問文の全文）は全設問に必須**（2026-08-24 新設）。配信前の `run_checks.sh` の
+　 **`check_hint.py`** が **配信HTMLそのものから設問文を取り出し**、JSONの `prompt` と**突合**する
+　 （不一致・未記載は配信拒否）。JSONだけ整えてHTMLにヒントを書く抜け道を塞ぐため。
+※ **`answer_core`（採点の合格条件となる中核語）は level=応用 の全設問に必須**（2026-08-24 新設）。
+　 **一意性は設問ではなく解答側で担保する**＝「答えが割れるから」と設問に観点を書き足さない。
+　 `check_hint.py` は **`answer_core` の語が設問文に出ていたら配信拒否**（＝答えそのものを渡している。
+　 `hint_reason` を書いても通さない）。
+※ **`hint_reason`（観点を足した理由）**＝観点・条件・限定を設問に書いたら必ず宣言する。
+　 宣言があれば〔観点の手渡し〕〔個数の先出し〕は通るが、**設計シートと関門に件数が表示される**
+　 （足すこと自体は禁じないが、**黙って足すことを不可能にする**）。宣言が無ければ応用は配信拒否。
+※ **`answer_variants`（許容する答え方の幅）**＝記述の答え方の揺れは**解答側に登録して吸収する**。
+　 `av_report.py` が記述の「要目視」行にこれを並べて出す。**設問を縛って揺れを消さないこと。**
+
 ※ `total_points`・各設問の `point` は**必須**（2026-08-18）。配信前の `run_checks.sh` の配点検算が
 　 **`questions[].point` の合計 == `total_points`** を機械で照合する（合わなければ配信不可）。
 　 満点は `TOTAL_POINTS`（ステップ3）と一致させる。**この欄が無いと配点検算が発火せず素通りする**
@@ -976,8 +1008,9 @@ HTMLと同じフォルダに出力する（`json.dump(..., ensure_ascii=False, i
 　 **difficulty_primary=complexity の教科で全設問に必須**（2026-08-19 新設／2026-08-20 定義改訂・2軸化）。
 　 配信前の `run_checks.sh` の **`check_difficulty.py`** が `difficulty_primary` で主軸を切り替え、
 　 level（基本/標準/応用）に対する**主軸の設問数構成比**を照合する（1問=1票）。
-　 complexity 教科の応用＝low≤30%・high≥30%・mid+high≥70%（**recall 上限なし**）／
-　 process 教科の応用＝recall≤30%・construct≥15%・select+construct≥70%。**必須欄が無いと配信不可。**
+　 complexity 教科の応用＝**low=0・high≥60%**（**recall 上限なし**）／
+　 process 教科の応用＝**recall=0・construct≥40%**（2026-08-23 第3次改修で締めた値。実装と一致）。
+　 **必須欄が無いと配信不可。**
 　 `load` も `complexity` も format でも**手数でもない**＝「頭の中で何が起きるか・要素をいくつ関係づけるか」で決める。
 　 旧ラベル（drill/apply/think＝手数基準）は [NG]。
 

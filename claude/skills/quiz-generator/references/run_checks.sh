@@ -7,6 +7,7 @@
 # 動作:
 #   1. (log.json を渡せば) カバレッジ検査 check_coverage.py
 #   2. 答え漏れ検査 check_leak.py（見出しへの漏れがあれば終了コード非ゼロ＝ここで停止）
+#   2-2. 設問文のヒント検査 check_hint.py（配信HTMLの設問文を読む＝観点の手渡し・答えの中核語の重なり）
 #   3. (log.json を渡せば) つまずき検査 check_pitfalls.py（関連/類似2-3のpitfall＋巻末▶）
 #   4. (模試のみ) 承認ターン検査 check_approvals.py（質問/承認ターンを飛ばしていないか）
 #   どれかが失敗したら set -e により そこで止まる（次へ進めない＝ハード関門）。
@@ -46,6 +47,11 @@ fi
 
 echo "▼ 答え漏れ検査（見出しへの漏れは停止／設問文一致は注意）"
 "$PY" "$REF/check_leak.py" "$HTML"
+
+if [ -n "$LOG" ]; then
+  echo "▼ ヒント検査（設問文＝配信HTMLそのものを読む・2026-08-24 新設）"
+  "$PY" "$REF/check_hint.py" "$HTML" "$LOG"
+fi
 
 if [ -n "$LOG" ]; then
   echo "▼ つまずき検査（関連＝数学は類似2/3 に pitfall／巻末に ▶よくある誤り）"

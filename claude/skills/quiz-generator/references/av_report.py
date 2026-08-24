@@ -115,6 +115,8 @@ def main():
     logd = json.load(open(log, encoding="utf-8"))
     qs = logd.get("questions", [])
     fmt_of = {q.get("mondai_id"): q.get("format", "") for q in qs}
+    # 設問ごとのメタ（採点の合格条件・許容の幅）。2026-08-24 対策B で参照する。
+    qmeta_of = {q.get("mondai_id"): q for q in qs}
     log_ids = [q.get("mondai_id") for q in qs]
     rd = json.load(open(rede, encoding="utf-8"))
 
@@ -147,8 +149,15 @@ def main():
             twoA = "✓" if norm(my) == norm(a1) else "✗"
             if twoA == "✗":
                 twoA_all = False
+        # ★2026-08-24（対策B）：記述は 2A を機械照合できず「要目視」になる。ここで
+        #   採点の合格条件(answer_core)と許容の幅(answer_variants)を並べて出し、
+        #   **答え方の揺れは解答側で吸収する**（設問に観点を書き足して揺れを消さない）。
+        qmeta = qmeta_of.get(qid, {})
+        core = qmeta.get("answer_core")
+        vari = qmeta.get("answer_variants")
         problems.append(dict(id=qid, format=fmt, ans_listed=a1, ans_exp=a2,
-                             twoB=twoB, rederived=my, twoA=twoA, twoC=r.get("twoC", "")))
+                             twoB=twoB, rederived=my, twoA=twoA, twoC=r.get("twoC", ""),
+                             answer_core=core, answer_variants=vari))
 
     # 2C 知識検証の証跡を必須化（2026-08-20 新設・恒久ゲート）。
     #   なぜ要るか（2026-08-20 の失敗）：av_begin/av_report/av_stamp のスクリプトだけ通せば、
@@ -196,6 +205,12 @@ def main():
     print(f"  出題 {len(log_ids)}問 / 巻末① {len(ans1)}件 / rederived {len(rd)}件")
     print(f"  2B(①=②) : {'全一致' if twoB_all else '✗あり'}")
     print(f"  2A(短答) : {'全一致' if twoA_all else '✗あり'}（記述・図表は要目視で除外）")
+    rv = [p for p in problems if p["twoA"].startswith("要目視")]
+    with_core = [p for p in rv if p.get("answer_core")]
+    with_var = [p for p in rv if p.get("answer_variants")]
+    print(f"  記述の要目視: {len(rv)}件（採点条件 answer_core {len(with_core)}件 / "
+          f"許容の幅 answer_variants {len(with_var)}件）"
+          "　※揺れは解答側で吸収する（設問に観点を足さない）")
     print(f"  完全性   : {'OK' if completeness_ok else 'NG'}")
     print(f"  2C(裏取り): {'全問記入' if twoC_ok else 'NG（未記入あり）'}"
           f"{'／要確認 ' + str(len(twoC_review)) + '問' if twoC_review else ''}")
