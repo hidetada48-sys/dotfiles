@@ -53,6 +53,15 @@ COUNT_PATTERNS = [
 GENERIC = {"気候", "説明", "理由", "特徴", "地域", "人々", "生活", "japan", "日本",
            "違い", "ちがい", "関係", "変化", "影響", "工夫", "問題"}
 
+# 英語の機能語。answer_core が英文になる英語では、これらが設問文に出ても「答えを渡した」ことに
+# ならない（例：設問文の「be動詞を使って」と answer_core の be が当たる＝誤検知）。
+# 内容語（動詞・名詞・数詞）だけで判定させるために除外する（2026-08-25）。
+STOP_EN = {"is", "am", "are", "was", "were", "be", "do", "does", "did", "not", "no", "yes",
+           "the", "a", "an", "this", "that", "these", "those", "to", "of", "in", "on", "at",
+           "for", "with", "and", "or", "but", "it", "he", "she", "they", "we", "you", "i",
+           "his", "her", "their", "our", "your", "my", "me", "him", "them", "us",
+           "what", "when", "where", "who", "whose", "which", "how", "why", "can", "will"}
+
 MIN_TERM = 2  # 重なり判定に使う語の最短文字数
 
 
@@ -93,9 +102,20 @@ def core_terms(q):
     terms = []
     for t in v:
         t = str(t).strip()
-        if len(t) >= MIN_TERM and t not in GENERIC:
+        if len(t) >= MIN_TERM and t not in GENERIC and t.lower().strip(".?!,'’") not in STOP_EN:
             terms.append(t)
     return terms
+
+
+def core_overlap(text, q):
+    """設問文 text に answer_core の中核語が出ていないかを見る共通判定。
+       ★配信ゲート（本ファイル main）と承認前の設計シート（build_design_sheet.py）が
+         同じ関数を呼ぶ＝両者のドリフト防止（2026-08-25 切り出し）。
+       返り値 (未宣言か, 見つかった語のリスト)。"""
+    terms = core_terms(q)
+    if terms is None:
+        return True, []
+    return False, [t for t in terms if t in text]
 
 
 def main():
@@ -162,13 +182,12 @@ def main():
             else:
                 (ng if hard else warn).append(line + "  ＝hint_reason の宣言が無い")
 
-        terms = core_terms(q)
-        if terms is None:
+        undeclared_core, found = core_overlap(text, q)
+        if undeclared_core:
             if hard:
                 ng.append(f"  ・{qid}：answer_core（採点の合格条件となる語）が未宣言"
                           "＝一意性は設問でなく解答側に持たせること")
         else:
-            found = [t for t in terms if t in text]
             if found:
                 n_core += 1
                 # 宣言があっても通さない（答えそのものを渡しているため）

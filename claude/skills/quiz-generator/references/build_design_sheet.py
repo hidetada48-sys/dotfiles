@@ -141,10 +141,10 @@ def build(data):
     # ★2026-08-24：設問文そのものを承認ターンで点検する（要約=brief だけを見せていたため、
     #   文言に混入したヒントが承認の場に出ず、専務が解いて初めて見つかる状態だった）。
     #   判定語は check_hint.py から取り込む（配信ゲートと同じ目で見る＝ドリフト防止）。
-    no_prompt, hint_hits, declared = [], [], []
+    no_prompt, hint_hits, declared, core_hits, no_core = [], [], [], [], []
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from check_hint import VIEWPOINT_PATTERNS, COUNT_PATTERNS
+        from check_hint import VIEWPOINT_PATTERNS, COUNT_PATTERNS, core_overlap
         for q in allq:
             qid = q.get("id", "?")
             text = str(q.get("prompt") or "")
@@ -156,12 +156,23 @@ def build(data):
                 hint_hits.append(qid)
             if str(q.get("hint_reason") or "").strip():
                 declared.append(qid)
+            # ★2026-08-25：答えの中核語の重なりを承認の場でも見る。
+            #   配信ゲート（check_hint）だけが見ていたため、承認シートは緑のまま出せた＝
+            #   英語で「答えの英文を応答文として設問に見せる」型の誤りが、専務の目に頼る状態だった。
+            undecl, found = core_overlap(text, q)
+            if undecl:
+                no_core.append(qid)
+            elif found:
+                core_hits.append(f'{qid}（{" ".join(found[:4])}）')
     except Exception as e:
         no_prompt = [f"検査不能: {e}"]
     undeclared = [x for x in hint_hits if x not in declared]
-    ok_prompt = (len(no_prompt) == 0 and len(undeclared) == 0)
+    hard = str(level) in ("応用", "発展")
+    ok_prompt = (len(no_prompt) == 0 and len(undeclared) == 0 and len(core_hits) == 0
+                 and not (hard and no_core))
 
     return dict(no_prompt=no_prompt, hint_hits=hint_hits, declared=declared,
+                core_hits=core_hits, no_core=no_core,
                 undeclared=undeclared, ok_prompt=ok_prompt,allq=allq, n=n, pts=pts, tm=tm, dist=dist, src=src, primary=primary,
                 level=level, T=T, dkey=dkey, ok_pts=ok_pts, ok_time=ok_time,
                 passed=passed, min_q=min_q, ok_scale=ok_scale, tp=tp, tl=tl,
@@ -235,10 +246,16 @@ def render(data, s):
     out.append(f'<div class="card"><h3>由来（③間違い ④落とし穴 ⑤ブリーフ）</h3>'
                f'<div class="sm">{srcs}</div></div>')
     pm = (f'ヒント語 {len(s["hint_hits"])}件（申告 {len(s["declared"])}件・'
-          f'未申告 {len(s["undeclared"])}件）' if not s["no_prompt"]
+          f'未申告 {len(s["undeclared"])}件）／答えの中核語の重なり {len(s["core_hits"])}件'
+          + (f'／answer_core 未宣言 {len(s["no_core"])}件' if s["no_core"] else '')
+          if not s["no_prompt"]
           else f'設問文(prompt)未記載 {len(s["no_prompt"])}件')
     out.append(f'<div class="card"><h3>設問文の点検</h3><div class="sm">{escape(pm)}　'
-               f'{mark(s["ok_prompt"])}</div></div>')
+               f'{mark(s["ok_prompt"])}</div>'
+               + (f'<div class="sm">重なり: {escape("／".join(s["core_hits"][:6]))}'
+                  '<br>＝答えの決め手を設問が渡している（英語なら答えの英文を見せている）</div>'
+                  if s["core_hits"] else '')
+               + '</div>')
     out.append('</div>')
 
     # 大問ごとの小問明細（通しNo.）
@@ -315,7 +332,11 @@ def main():
     else:
         print(f"  設問文の点検: ヒント語 {len(s['hint_hits'])}件"
               f"（申告 {len(s['declared'])}件・未申告 {len(s['undeclared'])}件）"
+              f"／中核語の重なり {len(s['core_hits'])}件"
+              f"／answer_core 未宣言 {len(s['no_core'])}件"
               f": {'OK' if s['ok_prompt'] else 'NG'}")
+        for x in s['core_hits'][:6]:
+            print(f"    ・重なり {x}")
     if s["level"] == "応用":
         nsel = len(s.get("sel_qs", []))
         print(f"  応用の形式（純二択のみ禁止）: {'OK（選択問題' + str(nsel) + '問・純二択0）' if s['ok_choice'] else 'NG（純二択=' + str(len(s['choice_qs'])) + '問）'}")
