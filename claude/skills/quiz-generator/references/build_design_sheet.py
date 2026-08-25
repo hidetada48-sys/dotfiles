@@ -285,6 +285,13 @@ def render(data, s):
         dp = sum(q["point"] for q in d["q"])
         out.append(f'<div class="dsec">大問{d["no"]}　{escape(str(d.get("title","")))}'
                    f'（{dp}点・{d.get("time","?")}分・{len(d["q"])}問）</div>')
+        # ★2026-08-25：リード文・共通の式セット（lead/expr）も承認の場に出す。
+        #   これが無いと選択肢セットを使う問い（完答・記号選択）を専務が判断できない。
+        for key, lb in (("lead", "リード文"), ("expr", "共通の式・資料")):
+            v = str(d.get(key) or "").strip()
+            if v:
+                out.append(f'<div style="margin:2px 0 6px;padding:6px 8px;background:#f6f6f2;'
+                           f'border-left:3px solid #bbb;font-size:10pt">〔{lb}〕{escape(v)}</div>')
         out.append('<table><tr><th>No</th><th>内容</th><th>形式</th><th>配点</th>'
                    f'<th>{s["T"]["label"]}</th><th>狙うつまずき</th></tr>')
         for q in d["q"]:
@@ -302,9 +309,12 @@ def render(data, s):
             #   要約を見せている限り承認の場では見つけられない。
             prompt = str(q.get("prompt") or "")
             if prompt:
-                body = (f'{escape(prompt)}'
-                        f'<br><span style="color:#888;font-size:9pt">〔要約〕'
-                        f'{escape(str(q.get("brief","")))}</span>')
+                body = escape(prompt)
+                ch = str(q.get("choices") or "").strip()
+                if ch:  # ★2026-08-25：選択肢も承認の場に出す（実物と同じものを見て判断できるように）
+                    body += f'<br><span style="color:#333">{escape(ch)}</span>'
+                body += (f'<br><span style="color:#888;font-size:9pt">〔要約〕'
+                         f'{escape(str(q.get("brief","")))}</span>')
             else:
                 body = (f'{escape(str(q.get("brief","")))}'
                         f'<br><span style="color:#c0142b;font-size:9pt">※設問文(prompt)未記載</span>')
