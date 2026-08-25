@@ -47,11 +47,13 @@ THRESHOLDS = {
         "rule": {"応用": "low=0 / high≥60%（midは応用でない）", "標準": "low≤55% / high≥1問"},
     },
     "process": {  # 主軸=思考の種類
-        "応用": lambda c, n: (c["recall"] == 0 and c["construct"]/n >= 0.40),
+        # ★第8次（2026-08-25）＝recall=0 は撤回。応用の主判定は「再認をほぼ置かない」へ移した
+        #   （下の recognition 集計で別途判定する。ここは construct 下限だけを見る）。
+        "応用": lambda c, n: (c["construct"]/n >= 0.40),
         "標準": lambda c, n: (c["recall"]/n <= 0.55 and c["construct"] >= 1),
         "keys": ["recall", "select", "construct"],
         "label": "思考の種類",
-        "rule": {"応用": "recall=0 / construct≥40%（recallは応用でない）", "標準": "recall≤55% / construct≥1問"},
+        "rule": {"応用": "construct≥40%（＋再認≤15%は別枠で判定）", "標準": "recall≤55% / construct≥1問"},
     },
 }
 
@@ -118,6 +120,18 @@ def build(data):
     except Exception:
         choice_qs = []
     ok_choice = (len(choice_qs) == 0)
+    # ★第8次（2026-08-25）＝応用(process)の主判定＝「候補を手渡した問い(再認)」の比率。
+    #   check_difficulty.py と同じ関数で数える（シート緑＝配信緑）。
+    rec_qs, ok_recog, rec_max = [], True, 15
+    if primary != "complexity":
+        try:
+            from check_difficulty import has_choices, RECOGNITION_MAX_PCT
+            rec_max = RECOGNITION_MAX_PCT
+            rec_qs = [q.get("id", "?") for q in allq if has_choices(q)]
+            if level == "応用":
+                ok_recog = (n > 0 and len(rec_qs) / n * 100 <= rec_max + 1e-9)
+        except Exception:
+            pass
     # 参考表示用＝選択形式（純二択以外も含む）の件数。禁止ではなく可視化のみ。
     _SEL = ("選択", "記号", "誤り選び", "並べ替え", "並べかえ", "択一", "組合せ",
             "組み合わせ", "多肢", "choice")
@@ -146,7 +160,12 @@ def build(data):
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from check_hint import (VIEWPOINT_PATTERNS, COUNT_PATTERNS, core_overlap,
-                                PROCEDURE_RULES, instruction_len, LEN_NG, COMMA_NG)
+                                PROCEDURE_RULES, instruction_len, LEN_NG, COMMA_NG,
+                                ATTACH_RULES, LEN_NG_PROCESS, COMMA_NG_PROCESS)
+        _hard = str(level) in ("応用", "発展")
+        _proc = (primary != "complexity")
+        LEN_NG = LEN_NG_PROCESS if (_proc and _hard) else LEN_NG
+        COMMA_NG = COMMA_NG_PROCESS if (_proc and _hard) else COMMA_NG
         for q in allq:
             qid = q.get("id", "?")
             text = str(q.get("prompt") or "")
@@ -167,6 +186,10 @@ def build(data):
             ph = [lab for pat, lab in PROCEDURE_RULES if re.search(pat, text)]
             if ph:
                 proc_hits.append(f'{qid}（{ph[0]}）')
+            # ★第8次：付帯指示句＝答えの目次を渡していないか
+            ah = [lab for pat, lab in ATTACH_RULES if re.search(pat, text)]
+            if ah:
+                proc_hits.append(f'{qid}（{ah[0]}）')
             il = instruction_len(text); ilens.append(il)
             if il > LEN_NG or text.count("、") >= COMMA_NG:
                 long_hits.append(f'{qid}（指示{il}字'
@@ -192,6 +215,7 @@ def build(data):
                 level=level, T=T, dkey=dkey, ok_pts=ok_pts, ok_time=ok_time,
                 passed=passed, min_q=min_q, ok_scale=ok_scale, tp=tp, tl=tl,
                 choice_qs=choice_qs, ok_choice=ok_choice, sel_qs=sel_qs,
+                rec_qs=rec_qs, ok_recog=ok_recog, rec_max=rec_max,
                 genuine_bad=genuine_bad, ok_genuine=ok_genuine)
 
 
@@ -250,6 +274,15 @@ def render(data, s):
                   else f'純二択 {len(cq)}問（{escape("、".join(str(x) for x in cq[:10]))}）')
         out.append(f'<div class="card"><h3>応用の形式（純二択のみ禁止）{mark(s["ok_choice"])}</h3>'
                    f'<div class="sm">{detail}<br>選択問題は可・純二択（○×/正誤/2択）だけ不可</div></div>')
+        if s.get("primary") != "complexity":
+            nrec = len(s.get("rec_qs") or [])
+            rp = nrec / s["n"] * 100 if s["n"] else 0
+            rdetail = (f'候補を手渡した設問 {nrec}問（{rp:.0f}%）／自由想起 {s["n"] - nrec}問'
+                       f'<br>上限{s.get("rec_max", 15)}%＝選択肢は並べ替え等、選択でしか成立しない形だけに'
+                       + ('' if s["ok_recog"] else
+                          '<br>' + escape("、".join(str(x) for x in (s.get("rec_qs") or [])[:12]))))
+            out.append(f'<div class="card"><h3>応用の主判定＝再認の少なさ{mark(s["ok_recog"])}</h3>'
+                       f'<div class="sm">{rdetail}</div></div>')
         gdetail = ("本物（想起でなく導出/転移・複数を結合）" if s["ok_genuine"]
                    else f'ニセ応用 {len(s["genuine_bad"])}件（answer_mode/links 不足）')
         out.append(f'<div class="card"><h3>応用の本物さ（mode/links）{mark(s["ok_genuine"])}</h3>'
@@ -373,6 +406,11 @@ def main():
             print(f"    ・重なり {x}")
     if s["level"] == "応用":
         nsel = len(s.get("sel_qs", []))
+        if s.get("primary") != "complexity":
+            nrec = len(s.get("rec_qs") or [])
+            rp = nrec / s["n"] * 100 if s["n"] else 0
+            print(f"  応用の主判定＝再認の少なさ: {'OK' if s['ok_recog'] else 'NG'}"
+                  f"（候補を手渡した設問 {nrec}問 {rp:.0f}% / 上限{s.get('rec_max',15)}%）")
         print(f"  応用の形式（純二択のみ禁止）: {'OK（選択問題' + str(nsel) + '問・純二択0）' if s['ok_choice'] else 'NG（純二択=' + str(len(s['choice_qs'])) + '問）'}")
         if s["primary"] != "complexity":
             if s["ok_genuine"]:

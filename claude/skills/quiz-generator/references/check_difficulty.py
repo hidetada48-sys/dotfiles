@@ -33,7 +33,8 @@
         公式1回の直接適用は low〜mid（＝B・high 水増しの禁止・2026-08-23）。
   "process"（暗記が原子的な教科＝漢字・社会用語・国語文法など）
       → 主軸＝②思考の種類（複数を関係づける・説明する）。
-      応用 : recall = 0 かつ construct ≥ 40%（★recall は応用ではない・2026-08-23）
+      応用 : **再認(候補を手渡した問い) ≤ 15%** かつ construct ≥ 40%
+             （★2026-08-25 第8次で recall=0 を撤回。簡単なのは想起ではなく再認だった。下記）
       標準 : recall ≤ 55% かつ construct ≥ 1問
       ※各問に load(recall/select/construct) が必須。
   宣言が無いときは "process"（従来挙動）で判定し、[注意] を出して宣言を促す。
@@ -109,6 +110,36 @@ BINARY_FORMAT_MARKERS = ("二択", "２択", "2択", "○×", "◯×", "〇×", 
 #     links       … 答えが結びつける“distinctな要素”の列挙。応用の select/construct は2つ以上必須
 #                   （単一事実で完結＝recall）。select は「自分で呼び出して競合させる2つ以上の既習＋
 #                   見分ける観点」を links に書く（候補を手渡さず、生徒が想起して切り分ける）。
+# ★第8次改修（2026-08-25 専務指摘）＝**応用ゲートの向きが逆だった**。
+#   旧ルールは process 軸の応用に recall=0 を課していた。「思い出すだけ＝簡単」という前提である。
+#   ところが実際に簡単なのは **再認（recognition＝候補を見て思い当たる）** であり、
+#   **自由想起（何も渡されず自分で書く）はその逆に難しい**（認知心理の基本）。
+#   旧ゲートは
+#     「最澄と空海が開いた宗派と中心寺院を答えなさい」＝recall → **応用として弾く**
+#     「正しい組合せをア〜エから選べ」            ＝select → **応用として通す**
+#   と判定していた＝一番簡単な形を通し、一番難しい形を禁じていた。
+#   その結果、作る側（Claude）は select/construct のラベルを取るために候補・観点・
+#   「〜を示して」という答えの目次を設問へ足しにいく＝**設問文にヒントが増える**。
+#   2026-08-25 の歴史ver3で、check_hint が全項目0件なのに実物は易しい、という形で表面化した。
+#   → 応用の条件を **「候補を手渡した問い(再認)をほぼ置かない」** へ反転する。
+#     recall そのものは禁じない（候補を渡さない短答＝自由想起は応用に足る）。
+RECOGNITION_MAX_PCT = 15   # 応用(process)で「候補を手渡した問い」に許す上限（並べ替え・本番型の誤り選択の枠）
+
+
+# format にこれらが入っていれば、choices フィールドを省いても再認として数える
+# （フィールドを書かないだけで検査をすり抜ける穴を塞ぐ）。
+RECOGNITION_FORMAT_MARKERS = ("選択", "記号", "組合せ", "組み合わせ", "選び", "分類", "並べかえ", "並べ替え")
+
+
+def has_choices(q):
+    """候補（選択肢）を手渡している設問か＝再認(recognition)。
+       ★choices フィールドの有無だけで見ると、書かなければ素通りする。format も併せて見る。"""
+    if str(q.get("choices") or "").strip():
+        return True
+    f = str(q.get("format") or "")
+    return any(m in f for m in RECOGNITION_FORMAT_MARKERS)
+
+
 MODE_ALIASES = {
     "retrieve": "retrieve", "想起": "retrieve", "思い出す": "retrieve", "記憶": "retrieve", "再生": "retrieve",
     "derive": "derive", "導出": "derive", "構成": "derive", "組み立て": "derive", "説明": "derive", "比較": "derive",
@@ -231,12 +262,20 @@ def gate_process(qs, bucket):
     r_pct, c_pct, h_pct = rc / nq * 100, cs / nq * 100, (sl + cs) / nq * 100
     print(f"  [軸=思考の種類] recall={rc}問({r_pct:.0f}%) / select={sl}問 / "
           f"construct={cs}問({c_pct:.0f}%) / select+construct={sl + cs}問({h_pct:.0f}%) / 設問{nq}問")
+    # ★第8次（2026-08-25）＝再認（候補を手渡した問い）の比率を測る。これが応用の主判定。
+    rec = [q for q in qs if has_choices(q)]
+    rec_pct = len(rec) / nq * 100 if nq else 0
+    print(f"  [再認] 候補を手渡した設問 {len(rec)}問({rec_pct:.0f}%) / "
+          f"自由想起 {nq - len(rec)}問（応用の上限 {RECOGNITION_MAX_PCT}%）")
     ok = True
     if bucket == "advanced":
-        # ★mid（recall）は応用ではない → 応用は recall=0・construct 主体に締める（2026-08-23）。
-        if rc > 0:
-            print(f"  [NG] 応用なのに recall(想起) が {rc}問（{r_pct:.0f}%）。"
-                  "応用は recall=0。規則を選ばせる／初見の文脈へ移す／説明させる問いに差し替えること")
+        # ★第8次：recall=0 は撤回。禁じるのは「候補を手渡すこと(再認)」であって想起ではない。
+        if rec_pct > RECOGNITION_MAX_PCT + 1e-9:
+            print(f"  [NG] 応用なのに 再認(候補を手渡した問い) が {rec_pct:.0f}% ＞ "
+                  f"上限{RECOGNITION_MAX_PCT}%。選択肢を外し、生徒が自分で書く形へ差し替えること"
+                  "（候補を渡してよいのは並べ替え等、選択でしか成立しない形だけ）")
+            for q in rec[:20]:
+                print(f"    ・{q.get('mondai_id','?')}：{str(q.get('format') or '')}")
             ok = False
         if c_pct < 40 - 1e-9:
             print(f"  [NG] 応用なのに construct(構成・説明) が {c_pct:.0f}% ＜ 下限40%")

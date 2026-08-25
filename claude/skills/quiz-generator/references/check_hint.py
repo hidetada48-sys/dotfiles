@@ -76,6 +76,23 @@ LEN_WARN = 45      # これを超えたら注意（読み手が趣旨を取り�
 LEN_NG = 55        # 応用はこれを超えたら配信拒否（誘導が紛れ込む余地が大きい）
 COMMA_NG = 3       # 読点がこの数以上＝複合指示の疑い
 
+# ★第8次改修（2026-08-25 専務指摘）＝process 軸（社会・国語）は設問文をもっと短く縛る。
+#   complexity 軸（数学・理科計算・英語）は測定値や条件を設問に載せる必要があるので 55字でよい。
+#   process 軸には載せるデータが無い。長くなるのは条件・観点・答えの目次を足したときだけである。
+#   歴史ver3 で「〜を示して説明」「〜をあげて説明」が全部素通りし、点検0件のまま易しい問題が
+#   できた（＝設問が答えの見取り図になっていた）ので、専用の上限と付帯指示句の禁止を置く。
+LEN_NG_PROCESS = 35     # process軸の応用はこれを超えたら配信拒否
+COMMA_NG_PROCESS = 2    # process軸の応用は読点がこの数以上でNG（＝1文1問い）
+
+# 〔7〕付帯指示句＝「答えに何を書けばよいか」の目次を設問側が渡してしまうもの。
+ATTACH_RULES = [
+    (r"を示して", "「〜を示して」＝答えに書く要素を渡している"),
+    (r"を(?:あげ|挙げ)て(?:説明|述べ|答え)", "「〜をあげて」＝答えに書く要素を渡している"),
+    (r"を答え[、，][^。]*(?:説明|述べ)", "「〜を答え、…説明」＝答えの目次を割り振っている"),
+    (r"名(?:と|を)[^。]*(?:ちがい|違い)を", "「名と…ちがいを」＝答えの構成を割り振っている"),
+    (r"(?:背景|理由|目的)と[^。]*(?:を|も)(?:説明|答え)", "「背景と〜」＝答えを2枠に割っている"),
+]
+
 _DATA_RE = re.compile(r"[0-9０-９A-Za-zＡ-Ｚａ-ｚ．.,／/×÷＝=・（）()【】〜~°³²]+")
 
 
@@ -167,6 +184,11 @@ def main():
 
     level = str(d.get("level") or d.get("difficulty") or "")
     hard = any(k in level for k in ("応用", "発展"))
+    # ★第8次：process軸（社会・国語）の応用は設問文の上限を厳しくする
+    axis = str(d.get("difficulty_primary") or "")
+    is_process = ("process" in axis) or ("思考" in axis) or ("種類" in axis)
+    len_ng = LEN_NG_PROCESS if (is_process and hard) else LEN_NG
+    comma_ng = COMMA_NG_PROCESS if (is_process and hard) else COMMA_NG
     pairs = extract_questions(html)
     by_id = {q.get("mondai_id"): q for q in qs}
 
@@ -195,7 +217,7 @@ def main():
 
     # ── 本体の4検査
     n_view = n_count = n_core = n_declared = 0
-    n_proc = n_long = 0
+    n_proc = n_long = n_attach = 0
     for qid, text in pairs:
         q = by_id.get(qid) or {}
         reason = str(q.get("hint_reason") or "").strip()
@@ -227,10 +249,17 @@ def main():
             (ng if hard else warn).append(line)
 
         # 〔6〕設問文が長い（第7次改修・語に依存しない指標）
+        # 〔7〕付帯指示句（第8次改修）＝答えの目次を渡していないか
+        ahits = [lab for pat, lab in ATTACH_RULES if re.search(pat, text)]
+        if ahits:
+            n_attach += 1
+            (ng if hard else warn).append(
+                f"  ・{qid}：〔7〕付帯指示句（{ahits[0]}）＝素で問うこと")
+
         ilen, ncomma = instruction_len(text), text.count("、")
-        if ilen > LEN_NG or ncomma >= COMMA_NG:
+        if ilen > len_ng or ncomma >= comma_ng:
             n_long += 1
-            why = (f"指示{ilen}字＞{LEN_NG}" if ilen > LEN_NG else f"読点{ncomma}個")
+            why = (f"指示{ilen}字＞{len_ng}" if ilen > len_ng else f"読点{ncomma}個")
             (ng if hard else warn).append(
                 f"  ・{qid}：〔6〕設問文が長い（{why}）＝1問1指示に分け、"
                 "条件・数値はリード文へ出すこと")
@@ -252,9 +281,9 @@ def main():
     ilens = [instruction_len(t) for _, t in pairs] or [0]
     print(f"  設問 {len(pairs)}問 / 観点の手渡し {n_view}件 / 個数の先出し {n_count}件 / "
           f"答えの中核語の重なり {n_core}件 / hint_reason 宣言 {n_declared}件")
-    print(f"  手順の誘導 {n_proc}件 / 長すぎる設問文 {n_long}件 / "
+    print(f"  手順の誘導 {n_proc}件 / 付帯指示句 {n_attach}件 / 長すぎる設問文 {n_long}件 / "
           f"指示のことば 平均{sum(ilens)//len(ilens)}字・最長{max(ilens)}字"
-          f"（注意{LEN_WARN}字・不可{LEN_NG}字）")
+          f"（注意{LEN_WARN}字・不可{len_ng}字）")
     for line in warn[:40]:
         print("  ⚠" + line[3:] if line.startswith("  ・") else line)
     if ng:
