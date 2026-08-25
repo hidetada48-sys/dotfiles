@@ -49,6 +49,42 @@ COUNT_PATTERNS = [
     r"[0-9０-９一二三四五六七八九十]\s*つに(?:分け|分類)される",
 ]
 
+# ★第7次改修（2026-08-25）＝設問文の「長さ」と「手順の誘導」を見る。
+#   背景＝第4次で設問文を読むようにしたが、見ていたのは決まった4つの型だけだった。
+#   専務に差し戻された31問を後から掛け直すと 0件で素通り（指示の平均72字・最長148字）。
+#   語を足すモグラ叩きでは次の言い回しで抜けるので、**語に依存しない指標＝長さ**を主にする。
+#   実データの分離（理科ver3 第1版=差し戻し / 第2版=承認）：
+#     指示55字超 … 第1版 24件 / 第2版 0件      読点3個以上 … 第1版 7件 / 第2版 0件
+# 〔5〕手順を誘導する表現（「〜を求め、〜し、〜を書きなさい」の複合指示・観点の指定）。
+PROCEDURE_RULES = [
+    (r"を求め[、，]", "「〜を求め、」＝解く手順を指定している"),
+    (r"がわかるように|が分かるように", "「〜がわかるように」＝答え方を指定している"),
+    (r"もあわせて|も併せて", "「〜もあわせて」＝複合指示"),
+    (r"それぞれについて", "「それぞれについて」＝観点を割り振っている"),
+    (r"をもとに|を基に", "「〜をもとに」＝使う材料を指定している"),
+    (r"をふまえて|を踏まえて", "「〜をふまえて」＝観点の指定"),
+    (r"決め手(?:になる|となる)(?:特徴|観点|点)を", "「決め手になる特徴を」＝観点を渡している"),
+    (r"からだのつくりの(?:ちがい|違い)", "「からだのつくりの」＝見る観点を渡している"),
+    # ★個数の指定は「2つ以上」だけを弾く（2026-08-25 判断）。
+    #   「2つあげなさい」＝“2つある”と教える＝1つしか思いつかない生徒に残りの存在を渡すヒント。
+    #   「1つ書きなさい」＝答えの分量の指定にすぎず、中身は渡していない（採点の公平にも要る）。
+    (r"[2-9２-９二三四五六七八九]\s*つ(?:以上)?(?:あげ|挙げ|答え|書き|述べ)", "個数の指定＝“何個ある”を教えている"),
+]
+
+# 〔6〕設問文の長さ。データ（数値・単位・記号）を除いた「指示のことば」で測る。
+LEN_WARN = 45      # これを超えたら注意（読み手が趣旨を取りにくい）
+LEN_NG = 55        # 応用はこれを超えたら配信拒否（誘導が紛れ込む余地が大きい）
+COMMA_NG = 3       # 読点がこの数以上＝複合指示の疑い
+
+_DATA_RE = re.compile(r"[0-9０-９A-Za-zＡ-Ｚａ-ｚ．.,／/×÷＝=・（）()【】〜~°³²]+")
+
+
+def instruction_len(text):
+    """設問文から数値・単位・記号を落とした「指示のことば」の文字数。
+       ★データが長いだけの問い（測定値を並べる計算問題）を誤って弾かないため。"""
+    return len(_DATA_RE.sub("", text))
+
+
 # 〔2〕で無視する汎用語（answer_core に混ざっても重なり判定に使わない）。
 GENERIC = {"気候", "説明", "理由", "特徴", "地域", "人々", "生活", "japan", "日本",
            "違い", "ちがい", "関係", "変化", "影響", "工夫", "問題"}
@@ -159,6 +195,7 @@ def main():
 
     # ── 本体の4検査
     n_view = n_count = n_core = n_declared = 0
+    n_proc = n_long = 0
     for qid, text in pairs:
         q = by_id.get(qid) or {}
         reason = str(q.get("hint_reason") or "").strip()
@@ -182,6 +219,24 @@ def main():
             else:
                 (ng if hard else warn).append(line + "  ＝hint_reason の宣言が無い")
 
+        # 〔5〕手順の誘導（第7次改修）
+        phits = [lab for pat, lab in PROCEDURE_RULES if re.search(pat, text)]
+        if phits:
+            n_proc += 1
+            line = f"  ・{qid}：〔5〕手順の誘導（{phits[0]}）"
+            (ng if hard else warn).append(line)
+
+        # 〔6〕設問文が長い（第7次改修・語に依存しない指標）
+        ilen, ncomma = instruction_len(text), text.count("、")
+        if ilen > LEN_NG or ncomma >= COMMA_NG:
+            n_long += 1
+            why = (f"指示{ilen}字＞{LEN_NG}" if ilen > LEN_NG else f"読点{ncomma}個")
+            (ng if hard else warn).append(
+                f"  ・{qid}：〔6〕設問文が長い（{why}）＝1問1指示に分け、"
+                "条件・数値はリード文へ出すこと")
+        elif ilen > LEN_WARN:
+            warn.append(f"  ・{qid}：〔6〕設問文がやや長い（指示{ilen}字）")
+
         undeclared_core, found = core_overlap(text, q)
         if undeclared_core:
             if hard:
@@ -194,8 +249,12 @@ def main():
                 ng.append(f"  ・{qid}：〔2〕答えの中核語が設問文にある → {' '.join(found[:5])}"
                           "  ＝宣言があっても不可")
 
+    ilens = [instruction_len(t) for _, t in pairs] or [0]
     print(f"  設問 {len(pairs)}問 / 観点の手渡し {n_view}件 / 個数の先出し {n_count}件 / "
           f"答えの中核語の重なり {n_core}件 / hint_reason 宣言 {n_declared}件")
+    print(f"  手順の誘導 {n_proc}件 / 長すぎる設問文 {n_long}件 / "
+          f"指示のことば 平均{sum(ilens)//len(ilens)}字・最長{max(ilens)}字"
+          f"（注意{LEN_WARN}字・不可{LEN_NG}字）")
     for line in warn[:40]:
         print("  ⚠" + line[3:] if line.startswith("  ・") else line)
     if ng:
@@ -206,7 +265,8 @@ def main():
               "どうしても足すなら hint_reason を宣言する（黙って足さない）。")
         sys.exit(1)
     print(f"  [OK] 設問文の検査を通過（level={level or '未宣言'}／観点の手渡し {n_view}件・"
-          f"個数の先出し {n_count}件はすべて hint_reason 申告あり／中核語の重なり 0件）")
+          f"個数の先出し {n_count}件はすべて hint_reason 申告あり／中核語の重なり 0件／"
+          f"手順の誘導 0件・長すぎる設問文 0件）")
     sys.exit(0)
 
 

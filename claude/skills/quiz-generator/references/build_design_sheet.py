@@ -142,9 +142,11 @@ def build(data):
     #   文言に混入したヒントが承認の場に出ず、専務が解いて初めて見つかる状態だった）。
     #   判定語は check_hint.py から取り込む（配信ゲートと同じ目で見る＝ドリフト防止）。
     no_prompt, hint_hits, declared, core_hits, no_core = [], [], [], [], []
+    proc_hits, long_hits, ilens = [], [], []
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from check_hint import VIEWPOINT_PATTERNS, COUNT_PATTERNS, core_overlap
+        from check_hint import (VIEWPOINT_PATTERNS, COUNT_PATTERNS, core_overlap,
+                                PROCEDURE_RULES, instruction_len, LEN_NG, COMMA_NG)
         for q in allq:
             qid = q.get("id", "?")
             text = str(q.get("prompt") or "")
@@ -159,6 +161,17 @@ def build(data):
             # ★2026-08-25：答えの中核語の重なりを承認の場でも見る。
             #   配信ゲート（check_hint）だけが見ていたため、承認シートは緑のまま出せた＝
             #   英語で「答えの英文を応答文として設問に見せる」型の誤りが、専務の目に頼る状態だった。
+            # ★2026-08-25 第7次：手順の誘導と設問文の長さも承認の場で見る。
+            #   背景＝設問文は読んでいたが、見ていたのは決まった型だけで、
+            #   「〜を求め、〜し、〜を書きなさい」も 72字の長文も素通りしていた。
+            ph = [lab for pat, lab in PROCEDURE_RULES if re.search(pat, text)]
+            if ph:
+                proc_hits.append(f'{qid}（{ph[0]}）')
+            il = instruction_len(text); ilens.append(il)
+            if il > LEN_NG or text.count("、") >= COMMA_NG:
+                long_hits.append(f'{qid}（指示{il}字'
+                                 + (f'・読点{text.count("、")}個' if text.count("、") >= COMMA_NG else '')
+                                 + '）')
             undecl, found = core_overlap(text, q)
             if undecl:
                 no_core.append(qid)
@@ -169,10 +182,12 @@ def build(data):
     undeclared = [x for x in hint_hits if x not in declared]
     hard = str(level) in ("応用", "発展")
     ok_prompt = (len(no_prompt) == 0 and len(undeclared) == 0 and len(core_hits) == 0
+                 and len(proc_hits) == 0 and len(long_hits) == 0
                  and not (hard and no_core))
 
     return dict(no_prompt=no_prompt, hint_hits=hint_hits, declared=declared,
                 core_hits=core_hits, no_core=no_core,
+                proc_hits=proc_hits, long_hits=long_hits, ilens=ilens,
                 undeclared=undeclared, ok_prompt=ok_prompt,allq=allq, n=n, pts=pts, tm=tm, dist=dist, src=src, primary=primary,
                 level=level, T=T, dkey=dkey, ok_pts=ok_pts, ok_time=ok_time,
                 passed=passed, min_q=min_q, ok_scale=ok_scale, tp=tp, tl=tl,
@@ -245,11 +260,17 @@ def render(data, s):
     srcs = "／".join(f'{k}{s["src"].get(k,0)}件' for k in "③④⑤")
     out.append(f'<div class="card"><h3>由来（③間違い ④落とし穴 ⑤ブリーフ）</h3>'
                f'<div class="sm">{srcs}</div></div>')
+    il = s.get("ilens") or [0]
     pm = (f'ヒント語 {len(s["hint_hits"])}件（申告 {len(s["declared"])}件・'
           f'未申告 {len(s["undeclared"])}件）／答えの中核語の重なり {len(s["core_hits"])}件'
+          f'／手順の誘導 {len(s["proc_hits"])}件／長すぎる設問文 {len(s["long_hits"])}件'
+          f'／指示のことば 平均{sum(il)//len(il)}字・最長{max(il)}字'
           + (f'／answer_core 未宣言 {len(s["no_core"])}件' if s["no_core"] else '')
           if not s["no_prompt"]
           else f'設問文(prompt)未記載 {len(s["no_prompt"])}件')
+    for lab, key in (("手順の誘導", "proc_hits"), ("長すぎ", "long_hits")):
+        if s.get(key):
+            pm += "　＜" + lab + "＞" + "、".join(str(x) for x in s[key][:6])
     out.append(f'<div class="card"><h3>設問文の点検</h3><div class="sm">{escape(pm)}　'
                f'{mark(s["ok_prompt"])}</div>'
                + (f'<div class="sm">重なり: {escape("／".join(s["core_hits"][:6]))}'
@@ -330,9 +351,12 @@ def main():
     if s["no_prompt"]:
         print(f"  設問文の点検: NG（prompt 未記載 {len(s['no_prompt'])}件＝承認に全文を出せない）")
     else:
+        il2 = s.get("ilens") or [0]
         print(f"  設問文の点検: ヒント語 {len(s['hint_hits'])}件"
               f"（申告 {len(s['declared'])}件・未申告 {len(s['undeclared'])}件）"
               f"／中核語の重なり {len(s['core_hits'])}件"
+              f"／手順の誘導 {len(s['proc_hits'])}件／長すぎる設問文 {len(s['long_hits'])}件"
+              f"／指示 平均{sum(il2)//len(il2)}字・最長{max(il2)}字"
               f"／answer_core 未宣言 {len(s['no_core'])}件"
               f": {'OK' if s['ok_prompt'] else 'NG'}")
         for x in s['core_hits'][:6]:
