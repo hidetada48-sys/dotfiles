@@ -159,7 +159,7 @@
     }
   },
   "tui": "fullscreen",
-  "showThinkingSummaries": true,
+  "showThinkingSummaries": false,
   "skipDangerousModePermissionPrompt": true,
   "skipAutoPermissionPrompt": true,
   "autoMode": {
