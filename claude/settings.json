@@ -107,6 +107,10 @@
           },
           {
             "type": "command",
+            "command": "bash ~/.claude/scripts/report-serve.sh"
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/scripts/memory-gate.sh --startup"
           }
         ]

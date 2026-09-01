@@ -4,6 +4,11 @@
 
 判定：直前の回答が10行超（空行除く）なのにレポートURLが無ければ block。
 例外：コードブロックを含む／直近の専務の指示が「チャットで」等／URLあり。
+
+★2026-09-02 修正：
+  Stopフックの入力JSONには last_assistant_message が含まれない場合がある
+  （含まれない環境では判定対象が空＝常にskipになり、関門が一度も鳴らなかった）。
+  そのため transcript_path から直近のassistant発話を読む経路を追加した。
 """
 import json
 import os
@@ -19,28 +24,43 @@ def out(verdict, key=""):
     sys.exit(0)
 
 
-def last_user_text(path):
-    """トランスクリプトから直近の専務の発話を取り出す（読めなければ空）"""
+def _text_of(content):
+    """message.content（文字列 or ブロック配列）からテキストだけ取り出す"""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            b.get("text", "") for b in content
+            if isinstance(b, dict) and b.get("type", "text") == "text"
+        )
+    return ""
+
+
+def scan_transcript(path):
+    """トランスクリプトを1回走査し、(直近のユーザー発話, 直近のassistant発話) を返す"""
     if not path or not os.path.exists(path):
-        return ""
-    text = ""
+        return "", ""
+    user_text, asst_text = "", ""
     try:
-        with open(path, encoding="utf-8") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             for line in f:
                 try:
                     e = json.loads(line)
                 except Exception:
                     continue
-                if e.get("type") != "user":
+                t = e.get("type")
+                if t not in ("user", "assistant"):
                     continue
-                c = e.get("message", {}).get("content", "")
-                if isinstance(c, list):
-                    c = "".join(b.get("text", "") for b in c if isinstance(b, dict))
-                if isinstance(c, str) and c.strip():
-                    text = c
+                s = _text_of(e.get("message", {}).get("content", "")).strip()
+                if not s:
+                    continue
+                if t == "user":
+                    user_text = s
+                else:
+                    asst_text = s
     except Exception:
-        return ""
-    return text
+        return user_text, asst_text
+    return user_text, asst_text
 
 
 def main():
@@ -49,9 +69,13 @@ def main():
     except Exception:
         out("skip")
 
+    lu, last_asst = scan_transcript(d.get("transcript_path") or "")
+
     msg = d.get("last_assistant_message") or ""
     if isinstance(msg, list):  # 配列形式にも一応対応
-        msg = "".join(b.get("text", "") for b in msg if isinstance(b, dict))
+        msg = _text_of(msg)
+    if not msg.strip():        # フックが渡してくれない環境＝トランスクリプトから拾う
+        msg = last_asst
     if not msg.strip():
         out("skip")
     if "```" in msg:              # コード提示は対象外
@@ -63,7 +87,6 @@ def main():
     if len(lines) <= LIMIT:
         out("skip")
 
-    lu = last_user_text(d.get("transcript_path") or "")
     for kw in SKIP_WORDS:
         if kw in lu:
             out("skip")
