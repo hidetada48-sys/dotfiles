@@ -35,30 +35,12 @@ mkdir -p "$BASIC_MEMORY_DIR"
 rclone copy "$GDRIVE_FOLDER/basic-memory/" "$BASIC_MEMORY_DIR" --update 2>> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] basic-memoryノートをダウンロードしました" >> "$LOG_FILE"
 
-# 売上明細（生CSV）の仮置場をダウンロード（販売参謀）
-# このプロジェクトがある機だけ実行する（他PCではスキップ）
+# 生産系データの仮置場をダウンロード
+# ※販売の売上生データ（sales-inbox）のDLは 2026-09-02 に廃止した。
+#   専務指示「ドライブに置くことは今後ない・取得はDBから」により、販売の月次は
+#   業務DB直結（sales/scripts/fetch_db_sales.py）が正規ルート。ドライブは見ない。
 SALES_PROJECT="$HOME/mino-sakura-hq"
 if [ -d "$SALES_PROJECT" ]; then
-  SALES_INBOX="$SALES_PROJECT/sales/inbox"
-  mkdir -p "$SALES_INBOX"
-  # copy --update：追加DLのみ（gdrive側もローカル側も削除しない）。
-  # 二重取り込みは「台帳(master)より新しいか」で判定する（raw/は廃止＝横展開設計）。
-  rclone copy "$GDRIVE_FOLDER/sales-inbox/" "$SALES_INBOX/" --update 2>> "$LOG_FILE"
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] 売上仮置場(sales-inbox)をダウンロードしました" >> "$LOG_FILE"
-
-  # 未取込チェックは中身判定（csv/xlsx両対応・ファイル名に依存しない）が必要なため Python に委譲する。
-  # bash では xlsx の中身を読めないので、得意先コードを中身から判定する check_inbox.py に任せる。
-  # 判定: inbox の各ファイルを中身判定し、得意先ごとに台帳(売上明細台帳_{コード}.csv)が
-  #   無い／古い なら未取込。build_master.py が台帳を書き直すと次回起動は新着0になる。
-  # SessionStart フックの stdout は Claude のコンテキストに入る（公式仕様）ので、
-  # 起動時に Claude が新着に気づき、専務へ「分析しますか？」と確認できる（工程4）。
-  PY=$(command -v python || command -v python3)
-  if [ -n "$PY" ]; then
-    ( cd "$SALES_PROJECT" && "$PY" sales/scripts/check_inbox.py )
-  else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] python が見つからず未取込チェックをスキップ" >> "$LOG_FILE"
-  fi
-
   # 生産系データ（薬品台帳・電気代・抄き上げ重量表・原料日誌）の仮置場をダウンロード
   # 専務がドライブの production-inbox に置いたファイルを受ける。
   # 原本(production/data/)へは直接落とさない：2026-07-10 に単価表が原料日誌807行を
