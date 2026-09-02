@@ -237,5 +237,6 @@
     "claude.ai Gmail",
     "claude.ai Google Calendar"
   ],
-  "agentPushNotifEnabled": true
+  "agentPushNotifEnabled": true,
+  "switchModelsOnFlag": false
 }
