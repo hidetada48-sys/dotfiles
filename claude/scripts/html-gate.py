@@ -91,8 +91,12 @@ def main():
         if kw in lu:
             out("skip")
 
+    # ★2026-09-02 修正（欠陥C）：キーに行数を入れると、行数が変わるたびに
+    #   カウンタが別物になり「同一プロンプトで何回ブロックしたか」が積み上がらない。
+    #   プロンプト単位で数えるため行数はキーから外し、行数は3列目で渡す。
     key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
-    out("block", "%s_%d" % (key, len(lines)))
+    sys.stdout.write("block\t" + key + "\t" + str(len(lines)) + "\n")
+    sys.exit(0)
 
 
 if __name__ == "__main__":

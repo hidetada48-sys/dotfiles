@@ -80,9 +80,13 @@ rm -f "$STATE_DIR/html-gate_nopython.count" 2>/dev/null
 RESULT=$(printf '%s' "$INPUT" | "$PY" "$JUDGE_ARG" 2>/dev/null)
 VERDICT=$(printf '%s' "$RESULT" | cut -f1)
 KEY=$(printf '%s' "$RESULT" | cut -f2)
+NLINES=$(printf '%s' "$RESULT" | cut -f3)
 [ "$VERDICT" != "block" ] && exit 0
 
-# --- 無限ループ防止：同一プロンプトで2回まで ---
+# --- 無限ループ防止：同一プロンプトで3回まで ---
+# ★2026-09-02 修正（欠陥C）：以前は2回で「黙って」素通りしていた＝粘れば通る抜け道。
+#   会話が詰まる事故は防ぎたいので上限自体は残すが、解除するときは必ず記録に残し、
+#   次のプロンプトの冒頭で表示する（html-rule-reminder.sh）＝黙って通ることだけを潰す。
 SAFE=$(printf '%s' "$KEY" | tr -c 'A-Za-z0-9_.-' '_')
 COUNT_FILE="$STATE_DIR/html-gate_${SAFE}.count"
 N=0
@@ -90,7 +94,13 @@ N=0
 case "$N" in ''|*[!0-9]*) N=0 ;; esac
 N=$((N + 1))
 echo "$N" > "$COUNT_FILE"
-[ "$N" -gt 2 ] && exit 0
+if [ "$N" -gt 3 ]; then
+    # 解除して通す＝違反のまま終わる。黙って通さず bypass ログに残す。
+    HEAD=$(printf '%s' "$INPUT" | "$PY" -c 'import sys,json;d=json.load(sys.stdin);m=d.get("last_assistant_message") or "";print(m.replace(chr(10)," ")[:80])' 2>/dev/null)
+    printf '%s\t%s行\t%s\t%s\n' "$(date '+%Y-%m-%d %H:%M')" "${NLINES:-?}" "$KEY" "$HEAD" \
+        >> "$STATE_DIR/html-gate_bypass.log" 2>/dev/null
+    exit 0
+fi
 
 cat >&2 <<'MSG'
 [HTML鉄則] いまの回答は本文が10行を超えているのに、レポートURLがありません。

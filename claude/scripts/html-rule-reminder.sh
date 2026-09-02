@@ -10,4 +10,14 @@ cat <<'MSG'
 （mdは内部の中間物。作ったら必ずHTMLへ変換し、URLの疎通まで確認してから提示する）
 迷ったらHTML化。短く済むものはそもそも作らない。
 MSG
+
+# --- 前回、関門(html-gate)を解除して終わっていたら必ず知らせる（2026-09-02 欠陥C対策）---
+BYPASS="$HOME/.claude/state/html-gate_bypass.log"
+if [ -s "$BYPASS" ]; then
+    echo ""
+    echo "[HTML鉄則・解除の記録] 直前に関門を解除したまま会話を終えています＝ルール違反が残っています。"
+    while IFS= read -r line; do echo "  - $line"; done < "$BYPASS"
+    echo "  → 該当の回答をレポート化し、URLで出し直すこと。"
+    rm -f "$BYPASS" 2>/dev/null
+fi
 exit 0
