@@ -33,6 +33,10 @@ fi
 [ -z "$INPUT" ] && exit 0
 [ -f "$JUDGE" ] || exit 0
 
+# --- 診断ログ：Stopフックが実際に渡してくる中身を1件だけ保存（原因調査用）---
+mkdir -p "$HOME/.claude/state" 2>/dev/null
+printf '%s' "$INPUT" > "$HOME/.claude/state/html-gate_payload.json" 2>/dev/null
+
 mkdir -p "$STATE_DIR" 2>/dev/null
 
 # --- 実際にスクリプトを動かせる python を選ぶ（Windowsは python 優先）---

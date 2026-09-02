@@ -141,6 +141,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "bash ~/.claude/scripts/html-rule-reminder.sh"
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/run-python.sh ~/.claude/hooks/memo-reminder.py"
           }
         ]
@@ -151,11 +155,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ~/.claude/scripts/memory-gate.sh"
+            "command": "bash ~/.claude/scripts/html-gate.sh"
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/scripts/html-gate.sh"
+            "command": "bash ~/.claude/scripts/memory-gate.sh"
           }
         ]
       }
