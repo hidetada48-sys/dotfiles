@@ -24,4 +24,18 @@ cd "$PROJECT" || exit 0
 PY=$(command -v python || command -v python3)
 [ -n "$PY" ] || exit 0
 
-"$PY" production/scripts/check_monthly_data.py 2>/dev/null
+# ★2026-09-02 修正：判定には xlrd（.xls を読む部品）が要る。
+#   これが無い環境（Linux 側）では中身を読めず、実際にはデータが入っているのに
+#   毎回「読み取りに失敗（ModuleNotFoundError）」と鳴り、進言の中身が嘘になっていた。
+#   xlrd が無ければ uv 経由（--with xlrd）で走らせる。どちらも無ければ黙らず知らせる。
+if "$PY" -c 'import xlrd' >/dev/null 2>&1; then
+    "$PY" production/scripts/check_monthly_data.py 2>/dev/null
+elif command -v uv >/dev/null 2>&1; then
+    uv run --with xlrd --no-project python production/scripts/check_monthly_data.py 2>/dev/null
+else
+    echo ""
+    echo "[月次データ] 判定できません（xlrd も uv も無いため .xls を読めない）。"
+    echo "  → 未取込かどうかは不明です。実データを確認してから進言してください。"
+    echo "  ※この判定は ~/.claude/scripts/monthly-data-alert.sh"
+    echo ""
+fi
