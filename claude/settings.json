@@ -200,7 +200,11 @@
       "$defaults",
       "Bash(rclone lsd:*)",
       "Bash(rclone ls:*)",
-      "Bash(rclone about:*)"
+      "Bash(rclone about:*)",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File tools/db/mino_query.ps1:*)",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File tools/db/obc_query.ps1:*)",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File tools\\db\\mino_query.ps1:*)",
+      "Bash(powershell -NoProfile -ExecutionPolicy Bypass -File tools\\db\\obc_query.ps1:*)"
     ],
     "soft_deny": [
       "$defaults",

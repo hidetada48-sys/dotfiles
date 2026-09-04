@@ -6,3 +6,6 @@
 
 # Pythonの自動生成キャッシュ
 __pycache__/
+
+# 設定ファイルの手動バックアップ（控えはローカルにだけ置く）
+claude/settings.json.bak
