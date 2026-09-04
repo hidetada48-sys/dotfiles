@@ -103,6 +103,10 @@
           },
           {
             "type": "command",
+            "command": "bash ~/.claude/scripts/stock-month-end-alert.sh"
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/scripts/monthly-data-alert.sh"
           },
           {
