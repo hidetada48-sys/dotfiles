@@ -39,11 +39,8 @@ else
   for KEYDIR in "$STAGE"/*/; do
     [ -d "$KEYDIR" ] || continue
     KEY=$(basename "$KEYDIR")
-    if [ "$KEY" = "root" ]; then
-      TARGET="$HOME/.claude/projects/$PREFIX/memory"
-    else
-      TARGET="$HOME/.claude/projects/$PREFIX-$KEY/memory"
-    fi
+    # キー→このPCのフォルダ名（PCごとの別名を吸収する。2026-09-10）
+    TARGET="$HOME/.claude/projects/$(gs_key_to_dir "$KEY" "$PREFIX")/memory"
     mkdir -p "$TARGET"
     # -u（新しいものだけ上書き）で、こちらの方が新しい記憶を古い記憶で潰さない
     cp -u "$KEYDIR"*.md "$TARGET/" 2>/dev/null

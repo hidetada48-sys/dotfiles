@@ -25,14 +25,42 @@ gs_canon() {
   done
   n="${n#-}"
   [ -z "$n" ] && n="root"
+  # 別名合わせ（2026-09-10 追加）
+  #   Linux は /home/hidetada48 直下で作業＝キー "root"
+  #   Windows は C:\Users\miryo\claude で作業＝キー "claude"
+  #   役割は同じ（同じ MEMORY.md を共有してきた）のに名前が違うため、
+  #   そのままだと記憶が2つの箱に分かれて永久に共有されない。"claude" は "root" に寄せる。
+  [ "$n" = "claude" ] && n="root"
   printf '%s' "$n"
+}
+
+# キー → このPCのプロジェクトフォルダ名（gs_canon の逆変換）
+# 使い方: gs_key_to_dir <キー> <接頭辞>
+gs_key_to_dir() {
+  local key="$1" prefix="$2"
+  if [ "$key" = "root" ]; then
+    # ホーム直下で作業しているPC（Linux）はそのまま
+    [ -d "$HOME/.claude/projects/$prefix" ] && { printf '%s' "$prefix"; return 0; }
+    # ホーム直下では作業しないPC（Windows）は claude プロジェクトが受け皿
+    [ -d "$HOME/.claude/projects/$prefix-claude" ] && { printf '%s' "$prefix-claude"; return 0; }
+    printf '%s' "$prefix"; return 0
+  fi
+  printf '%s' "$prefix-$key"
 }
 
 # このPCのプロジェクトフォルダ名の接頭辞を返す（キー→ローカルパスの逆引き用）
 gs_local_prefix() {
-  local p
+  local p d
   for p in $GS_HOME_KEYS; do
+    # 1) 完全一致：ホーム直下そのものを開いて作業したことがある場合（Linuxはこちらに当たる）
     [ -d "$HOME/.claude/projects/$p" ] && { printf '%s' "$p"; return 0; }
+    # 2) 前方一致：ホーム配下のプロジェクトしか無い場合。
+    #    2026-09-10 追加。Windows は C:\Users\miryo 直下で作業しないため
+    #    「C--Users-miryo」というフォルダが存在せず、1) だけでは接頭辞を特定できなかった。
+    #    その結果 Drive から受けた記憶が仮置場に残ったまま反映されなかった。
+    for d in "$HOME/.claude/projects/$p"-*; do
+      [ -d "$d" ] && { printf '%s' "$p"; return 0; }
+    done
   done
   printf ''
 }
