@@ -142,3 +142,18 @@ if [ ${#MISSING[@]} -gt 0 ]; then
   echo "================================================"
   echo ""
 fi
+
+# ========================================
+# dotfiles の取り込み漏れ（環境ドリフト）の検知
+# ========================================
+# ★2026-09-09 追加: 片方のPCで直したスクリプトを、もう片方が git pull していないと
+#   同じ不具合が延々と再発する（記憶がDriveに上がらない不具合の再発要因そのもの）。
+#   セッション開始時に「遅れているか」だけ見て知らせる。pull は自動でやらない
+#   （未コミットの変更を勝手に巻き込まないため）。
+if [ -d "$DOTFILES/.git" ] && command -v git >/dev/null 2>&1; then
+  timeout 10 git -C "$DOTFILES" fetch --quiet 2>/dev/null
+  BEHIND=$(git -C "$DOTFILES" rev-list --count HEAD..@{u} 2>/dev/null)
+  if [ -n "$BEHIND" ] && [ "$BEHIND" -gt 0 ] 2>/dev/null; then
+    echo "[setup] dotfiles が $BEHIND コミット遅れています。'git -C ~/dotfiles pull' で最新のスクリプトを取り込んでください。"
+  fi
+fi

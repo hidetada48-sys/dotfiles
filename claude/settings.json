@@ -168,6 +168,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/scripts/memory-gate.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/gdrive-upload.sh"
           }
         ]
       }
