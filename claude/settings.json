@@ -107,6 +107,10 @@
           },
           {
             "type": "command",
+            "command": "bash ~/.claude/scripts/production-nisshi-alert.sh"
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/scripts/monthly-data-alert.sh"
           },
           {
