@@ -15,6 +15,8 @@
 #   basic-memory が無い環境（Windows機など未導入時）は静かにスキップする。
 
 LOG_FILE="/tmp/basic-memory-resync.log"
+LOCK_DIR="/tmp/basic-memory-resync.lock"   # 多重実行を防ぐ鍵（ディレクトリ）
+STALE_SEC=600                              # 10分以上古い鍵は残骸とみなして奪う
 
 # basic-memory コマンドを解決（直接インストール > uvx の順）。無ければ空文字。
 resolve_bm() {
@@ -29,6 +31,20 @@ resolve_bm() {
 
 # 実処理はすべてバックグラウンドで実行し、セッション開始を止めない
 (
+  # --- 多重実行の防止（2026-09-12 追加） ---
+  # SessionStart が1回の起動で複数回発火することがあり、reindex が3本同時に走って
+  # SQLite を奪い合い、MCP の起動が60秒タイムアウトする原因になっていた。
+  # mkdir は「既にあれば必ず失敗する」アトミックな操作なので、これを鍵として使う。
+  # （flock は Git Bash に無いため使わない＝Windows/Linux 共通で動く）
+  if [ -d "$LOCK_DIR" ]; then
+    LOCK_MTIME=$(stat -c %Y "$LOCK_DIR" 2>/dev/null || echo 0)
+    if [ $(( $(date +%s) - LOCK_MTIME )) -gt "$STALE_SEC" ]; then
+      rmdir "$LOCK_DIR" 2>/dev/null   # 前回が異常終了して残った鍵を掃除
+    fi
+  fi
+  mkdir "$LOCK_DIR" 2>/dev/null || exit 0   # 鍵を取れない＝他が実行中。黙って降りる
+  trap 'rmdir "$LOCK_DIR" 2>/dev/null' EXIT
+
   BM=$(resolve_bm)
   [ -z "$BM" ] && exit 0   # 未導入環境（Windows等）はスキップ
 
