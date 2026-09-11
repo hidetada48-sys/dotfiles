@@ -247,16 +247,6 @@
       "**Routine under this repo's prefix**: report generation and serving under `.reports_html/`, `reviews/`, `intelligence/reports/`, `hr/reports/` are routine within this checkout only"
     ]
   },
-  "mcpServers": {
-    "basic-memory": {
-      "command": "uvx",
-      "args": [
-        "basic-memory",
-        "mcp"
-      ],
-      "alwaysLoad": true
-    }
-  },
   "disabledMcpServers": [
     "claude.ai Gmail",
     "claude.ai Google Calendar"
