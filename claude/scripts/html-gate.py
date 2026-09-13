@@ -2,7 +2,8 @@
 """html-gate.sh の判定部。Stopフックの入力JSONを標準入力で受け取り、
 "block\t<キー>" または "skip\t" を1行出力する。
 
-判定：直前の回答が10行超（空行除く）なのにレポートURLが無ければ block。
+判定：直前の回答が「長い」のにレポートURLが無ければ block。
+　　　長さは **行数（空行除く）と 文字数（空白・改行除く）のどちらか** で測る。
 例外：コードブロックを含む／直近の専務の指示が「チャットで」等／URLあり。
 
 ★2026-09-02 修正：
@@ -15,6 +16,10 @@ import os
 import sys
 
 LIMIT = int(os.environ.get("HTML_GATE_LIMIT", "10"))
+# ★2026-09-13 追加：行数だけで見ていたため「長い段落を数行」だと素通りしていた
+#   （6段落＝6行でも中身は800字、という回答が実際に抜けた＝専務指摘）。
+#   文字数でも測る。空白・改行は数えない。
+CHAR_LIMIT = int(os.environ.get("HTML_GATE_CHAR_LIMIT", "400"))
 # 専務が「チャットで答えろ」と明示した場合は鳴らさない
 SKIP_WORDS = ("チャットで", "HTML不要", "htmlは要らない", "そのまま書", "口頭で", "短く")
 
@@ -84,7 +89,8 @@ def main():
         out("skip")
 
     lines = [l for l in msg.split("\n") if l.strip()]
-    if len(lines) <= LIMIT:
+    chars = len("".join(msg.split()))          # 空白・改行を除いた文字数
+    if len(lines) <= LIMIT and chars <= CHAR_LIMIT:
         out("skip")
 
     for kw in SKIP_WORDS:
@@ -95,7 +101,9 @@ def main():
     #   カウンタが別物になり「同一プロンプトで何回ブロックしたか」が積み上がらない。
     #   プロンプト単位で数えるため行数はキーから外し、行数は3列目で渡す。
     key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
-    sys.stdout.write("block\t" + key + "\t" + str(len(lines)) + "\n")
+    # 3列目＝鳴った理由。行数超過なら行数、文字数超過なら「Nc」（cはcharsの意）
+    size = str(len(lines)) if len(lines) > LIMIT else str(chars) + "c"
+    sys.stdout.write("block\t" + key + "\t" + size + "\n")
     sys.exit(0)
 
 
