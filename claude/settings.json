@@ -10,7 +10,7 @@
       "Read(**/.env)",
       "Edit(**/.env)"
     ],
-    "defaultMode": "acceptEdits"
+    "defaultMode": "auto"
   },
   "model": "opus",
   "hooks": {
@@ -206,6 +206,8 @@
   },
   "showThinkingSummaries": false,
   "skipDangerousModePermissionPrompt": true,
+  "switchModelsOnFlag": false,
+  "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
   "autoMode": {
     "allow": [
@@ -255,6 +257,9 @@
     "claude.ai Gmail",
     "claude.ai Google Calendar"
   ],
-  "agentPushNotifEnabled": true,
-  "switchModelsOnFlag": false
+  "modelSettings": {
+    "claude-opus-5": {
+      "effortLevel": "high"
+    }
+  }
 }
