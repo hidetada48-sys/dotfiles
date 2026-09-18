@@ -12,9 +12,10 @@ OUT="$REPO/.reports_html"
 
 [ -d "$REPO" ] || exit 0
 
-# すでに listen していれば何もしない
+# すでに listen していれば起こさない（エクセルの受付 8831 は下で別に見る）
+UP8830=0
 if command -v curl >/dev/null 2>&1; then
-    curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT/" && exit 0
+    curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT/" && UP8830=1
 fi
 
 mkdir -p "$OUT" 2>/dev/null
@@ -38,7 +39,23 @@ case "$(uname -s 2>/dev/null)" in
     command -v cygpath >/dev/null 2>&1 && DIR_ARG="$(cygpath -w "$OUT")" ;;
 esac
 
-nohup "$PY" -m http.server "$PORT" --bind 127.0.0.1 --directory "$DIR_ARG" \
-      >/dev/null 2>&1 &
-disown 2>/dev/null
+if [ "$UP8830" = "0" ]; then
+    nohup "$PY" -m http.server "$PORT" --bind 127.0.0.1 --directory "$DIR_ARG" \
+          >/dev/null 2>&1 &
+    disown 2>/dev/null
+fi
+
+# エクセルの受付（127.0.0.1:8831）＝チャットのリンクからエクセルを開く（2026-09-18 専務指示）
+# 正体：$REPO/tools/xlsx_opener.py。落ちていたら起こす。
+OPENER="$REPO/tools/xlsx_opener.py"
+if [ -f "$OPENER" ]; then
+    UP8831=0
+    command -v curl >/dev/null 2>&1 && curl -s -m 2 -o /dev/null "http://127.0.0.1:8831/" && UP8831=1
+    if [ "$UP8831" = "0" ]; then
+        OP_ARG="$OPENER"
+        command -v cygpath >/dev/null 2>&1 && OP_ARG="$(cygpath -w "$OPENER")"
+        nohup "$PY" "$OP_ARG" >/dev/null 2>&1 &
+        disown 2>/dev/null
+    fi
+fi
 exit 0

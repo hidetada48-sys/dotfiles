@@ -21,6 +21,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/rtk-rewrite.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/excel-open-gate.sh"
           }
         ]
       },
@@ -108,6 +112,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/scripts/production-nisshi-alert.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/scripts/juyu-weekly-alert.sh"
           },
           {
             "type": "command",

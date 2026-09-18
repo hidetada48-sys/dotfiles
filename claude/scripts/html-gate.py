@@ -70,7 +70,7 @@ def scan_transcript(path):
 
 def main():
     try:
-        d = json.load(sys.stdin)
+        d = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))   # UTF-8で読む（既定のcp932だと日本語が約1.65倍に数えられ、短い回答まで止めていた 2026-09-18）
     except Exception:
         out("skip")
 
@@ -86,6 +86,8 @@ def main():
     if "```" in msg:              # コード提示は対象外
         out("skip")
     if "127.0.0.1:8830" in msg:   # レポートURLを出していれば合格
+        out("skip")
+    if "127.0.0.1:8831/open" in msg:   # エクセルは8831のリンクで渡す（2026-09-18 専務指示・恒久）＝リンクがあれば合格
         out("skip")
 
     lines = [l for l in msg.split("\n") if l.strip()]

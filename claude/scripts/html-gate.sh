@@ -22,6 +22,7 @@
 # 正典：CLAUDE.md「★回答提示の絶対ルール」／past_mistakes M-013・M-015
 
 set -u
+export PYTHONIOENCODING=utf-8   # 日本語を正しく数える（2026-09-18 cp932で字数が約1.65倍に化けていた）
 
 STATE_DIR="$HOME/.claude/state"
 JUDGE="$(dirname "$0")/html-gate.py"
