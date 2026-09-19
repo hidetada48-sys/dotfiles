@@ -30,6 +30,21 @@ def xlsx_paths(cmd):
     return found
 
 
+def committed_clean(p, repo):
+    """Gitに登録済みで、登録時から中身が変わっていないか（2026-09-19・Linuxでだけ使う）。
+    git pull で取り込むと日付が今日になり、合格印は作った側のPCにしか無いため、Linuxで誤って止まる。"""
+    import subprocess
+    rel = os.path.relpath(p, repo)
+    try:
+        tracked = subprocess.run(["git", "-C", str(repo), "ls-files", "--error-unmatch", "--", rel],
+                                 capture_output=True).returncode == 0
+        changed = subprocess.run(["git", "-C", str(repo), "status", "--porcelain", "--", rel],
+                                 capture_output=True, text=True).stdout.strip()
+    except Exception:
+        return False
+    return tracked and not changed
+
+
 def main():
     try:
         data = json.loads(sys.stdin.buffer.read().decode("utf-8"))   # 日本語パスを文字化けさせない
@@ -53,6 +68,8 @@ def main():
         st = p.stat()
         if dt.date.fromtimestamp(st.st_mtime) != dt.date.today():
             continue   # 今日作った・更新したものだけ
+        if os.name != "nt" and committed_clean(p, repo):
+            continue   # Linuxだけ：Gitに登録済みのまま＝作った側（Windows）で検査済み（専務指示 2026-09-19。Windowsは従来どおり）
         stamp = Path(tempfile.gettempdir()) / "excel_check" / p.stem / "PASS"
         ok = stamp.exists() and stamp.read_text(encoding="utf-8").strip() == f"{st.st_mtime_ns} {st.st_size}"
         if not ok:
