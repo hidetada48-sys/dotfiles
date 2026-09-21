@@ -212,8 +212,14 @@
       }
     }
   },
+  "modelSettings": {
+    "claude-opus-5": {
+      "effortLevel": "high"
+    }
+  },
   "showThinkingSummaries": false,
   "skipDangerousModePermissionPrompt": true,
+  "theme": "dark",
   "switchModelsOnFlag": false,
   "agentPushNotifEnabled": true,
   "skipAutoPermissionPrompt": true,
@@ -264,10 +270,5 @@
   "disabledMcpServers": [
     "claude.ai Gmail",
     "claude.ai Google Calendar"
-  ],
-  "modelSettings": {
-    "claude-opus-5": {
-      "effortLevel": "high"
-    }
-  }
+  ]
 }
