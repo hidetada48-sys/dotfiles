@@ -270,5 +270,6 @@
   "disabledMcpServers": [
     "claude.ai Gmail",
     "claude.ai Google Calendar"
-  ]
+  ],
+  "tui": "fullscreen"
 }
