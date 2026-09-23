@@ -12,6 +12,7 @@
   そのため transcript_path から直近のassistant発話を読む経路を追加した。
 """
 import json
+import re
 import os
 import sys
 
@@ -21,6 +22,25 @@ LIMIT = int(os.environ.get("HTML_GATE_LIMIT", "10"))
 #   文字数でも測る。空白・改行は数えない。
 CHAR_LIMIT = int(os.environ.get("HTML_GATE_CHAR_LIMIT", "400"))
 # 専務が「チャットで答えろ」と明示した場合は鳴らさない
+# ★2026-09-23 追加（専務指示・恒久）：レポートを作ったのにチャットで中身をだらだら書いていた。
+#   リンクがあれば無条件合格だった抜け道を塞ぐ。リンクがある回答は、URL部分を除いて
+#   行数5・文字数250まで（＝結論1行＋リンク＋判断を仰ぐこと1〜3行）。
+LINK_LINE_LIMIT = int(os.environ.get("HTML_GATE_LINK_LIMIT", "5"))
+LINK_CHAR_LIMIT = int(os.environ.get("HTML_GATE_LINK_CHAR_LIMIT", "250"))
+
+
+def body_size(msg):
+    """URLを除いた本文の行数・文字数を返す（リンクの長さで鳴らさないため）"""
+    t = re.sub(r"\(https?://[^)\s]*\)", "", msg)
+    t = re.sub(r"https?://\S+", "", t)
+    lines = [l for l in t.split("\n") if l.strip()]
+    return len(lines), len("".join(t.split()))
+
+
+def has_link(msg):
+    return "127.0.0.1:8830" in msg or "127.0.0.1:8831/open" in msg
+
+
 SKIP_WORDS = ("チャットで", "HTML不要", "htmlは要らない", "そのまま書", "口頭で", "短く")
 
 
@@ -85,10 +105,17 @@ def main():
         out("skip")
     if "```" in msg:              # コード提示は対象外
         out("skip")
-    if "127.0.0.1:8830" in msg:   # レポートURLを出していれば合格
-        out("skip")
-    if "127.0.0.1:8831/open" in msg:   # エクセルは8831のリンクで渡す（2026-09-18 専務指示・恒久）＝リンクがあれば合格
-        out("skip")
+    if has_link(msg):   # レポート（8830）・エクセル（8831）のリンクあり＝本文は短く（2026-09-23）
+        nl, nc = body_size(msg)
+        if nl <= LINK_LINE_LIMIT and nc <= LINK_CHAR_LIMIT:
+            out("skip")
+        for kw in SKIP_WORDS:
+            if kw in lu:
+                out("skip")
+        key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
+        # 3列目の先頭 L ＝「リンクはあるが本文が長い」
+        sys.stdout.write("block\t" + key + "\tL" + (str(nl) if nl > LINK_LINE_LIMIT else str(nc) + "c") + "\n")
+        sys.exit(0)
 
     lines = [l for l in msg.split("\n") if l.strip()]
     chars = len("".join(msg.split()))          # 空白・改行を除いた文字数

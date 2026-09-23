@@ -40,7 +40,26 @@ def main():
     has_link = "127.0.0.1:8830" in msg or "127.0.0.1:8831/open" in msg
     code = "```" in msg
     print(f"行数 {len(lines)}/{line_limit}　文字数 {chars}/{char_limit}　リンク {'あり' if has_link else 'なし'}")
-    if has_link or code or (len(lines) <= line_limit and chars <= char_limit):
+    if code:
+        print("OK：このまま出してよい")
+        return 0
+    if has_link:
+        # リンクがあるときは本文を短く（html-gate.py と同じ基準・2026-09-23）
+        try:
+            spec = importlib.util.spec_from_file_location("html_gate", GATE)
+            m = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(m)
+            nl, nc = m.body_size(msg)
+            ll, lc = m.LINK_LINE_LIMIT, m.LINK_CHAR_LIMIT
+        except Exception:
+            nl, nc, ll, lc = len(lines), chars, 5, 250
+        print(f"（リンクあり）URLを除く本文 行数 {nl}/{ll}　文字数 {nc}/{lc}")
+        if nl <= ll and nc <= lc:
+            print("OK：このまま出してよい")
+            return 0
+        print("NG：レポートがあるのに本文が長い。結論1行＋リンク＋判断を仰ぐこと（1〜3行）だけにする")
+        return 1
+    if len(lines) <= line_limit and chars <= char_limit:
         print("OK：このまま出してよい")
         return 0
     print("NG：削って結論1行＋要点3〜5行に収めるか、本文をレポートにしてリンクだけ出す")
