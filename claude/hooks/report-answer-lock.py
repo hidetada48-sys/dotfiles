@@ -22,7 +22,7 @@ def main():
     except Exception:
         return
     cmd = (d.get("tool_input") or {}).get("command", "") or ""
-    if "report_html.py" not in cmd:
+    if not re.search(r"python3?(\.exe)?\s+\S*report_html\.py", cmd):   # 実際に流したときだけ（文字列として出てくるだけの命令では鳴らさない）
         return
     # 変換した md から、渡すべきHTMLのURLを作る（--all だけなら目次）
     mds = re.findall(r'["\']?([^\s"\']+\.md)["\']?', cmd)
