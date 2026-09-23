@@ -103,6 +103,16 @@ if [ "$N" -gt 3 ]; then
     exit 0
 fi
 
+case "$NLINES" in P*)
+cat >&2 <<'MSG'
+[数えずに出した] 4行を超える回答なのに、precheck-answer.py で数えた下書きと同じ文ではありません。
+答えは先にスクラッチパッドの下書きに書き、python ~/.claude/scripts/precheck-answer.py <下書き> で数えてから、
+OK になった下書きをそのまま出す（長ければレポート、短ければチャット＝専務指示 2026-09-24）。止められても言い直さない。
+※この関門は ~/.claude/scripts/html-gate.sh
+MSG
+exit 2 ;;
+esac
+
 case "$NLINES" in L*)
 cat >&2 <<'MSG'
 [HTML鉄則] レポートのリンクを出したのに、チャットにも中身を書いています（URLを除き 行数3超・文字数120超、またはリンク以外の行に数字）。

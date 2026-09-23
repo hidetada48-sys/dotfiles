@@ -39,6 +39,25 @@ def body_size(msg):
     return len(lines), len("".join(t.split()))
 
 
+PRECHECK_MIN_LINES = int(os.environ.get("HTML_GATE_PRECHECK_MIN_LINES", "4"))
+PRECHECK_LOG = os.path.join(os.path.expanduser("~"), ".claude", "state", "precheck_ok.txt")
+
+
+def norm_hash(msg):
+    """空白・改行を除いた本文の指紋（下書きと表示した回答が同じ文かを見る）"""
+    import hashlib
+    return hashlib.sha1("".join(msg.split()).encode("utf-8")).hexdigest()
+
+
+def prechecked(msg):
+    """precheck-answer.py が OK を出した下書きの指紋に、この回答が含まれるか"""
+    try:
+        with open(PRECHECK_LOG, encoding="utf-8") as f:
+            return norm_hash(msg) in {l.split("\t")[0] for l in f if l.strip()}
+    except Exception:
+        return False
+
+
 def digit_lines(msg):
     """リンク（8830/8831）を含まない行のうち、数字（半角・全角）を含む行の数"""
     n = 0
@@ -118,6 +137,13 @@ def main():
         out("skip")
     if "```" in msg:              # コード提示は対象外
         out("skip")
+    # ★2026-09-24 追加（専務指示「表示する前に数えろ」）：長くならないと思い込むと数えずに出していた。
+    #   4行を超える回答は、precheck-answer.py で数えて OK になった下書きと同じ文でなければ止める。
+    if len([l for l in msg.split("\n") if l.strip()]) > PRECHECK_MIN_LINES and not prechecked(msg):
+        if not any(kw in lu for kw in SKIP_WORDS):
+            key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
+            sys.stdout.write("block\t" + key + "\tP\n")
+            sys.exit(0)
     if has_link(msg):   # レポート（8830）・エクセル（8831）のリンクあり＝本文は短く（2026-09-23）
         nl, nc = body_size(msg)
         # ★2026-09-24 追加（専務指示「機械で強制的に守れるようにしろ」）：3行・120字に収まっていても、

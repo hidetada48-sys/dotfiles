@@ -67,5 +67,21 @@ def main():
     return 1
 
 
+def record_ok(path):
+    """OK になった下書きの指紋を残す＝関門（html-gate.py）が「数えてから出したか」を照合する（2026-09-24）"""
+    import datetime
+    import hashlib
+    msg = Path(path).read_text(encoding="utf-8")
+    h = hashlib.sha1("".join(msg.split()).encode("utf-8")).hexdigest()
+    log = Path.home() / ".claude/state/precheck_ok.txt"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    old = log.read_text(encoding="utf-8").splitlines()[-199:] if log.exists() else []   # 直近200件だけ残す
+    stamp = f"{datetime.datetime.now():%Y-%m-%d %H:%M}"
+    log.write_text("\n".join(old + [h + "\t" + stamp]) + "\n", encoding="utf-8")
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    rc = main()
+    if rc == 0 and len(sys.argv) >= 2:
+        record_ok(sys.argv[1])
+    sys.exit(rc)
