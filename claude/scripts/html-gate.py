@@ -33,11 +33,8 @@ def body_size(msg):
     """URLを除いた本文の行数・文字数を返す（リンクの長さで鳴らさないため）"""
     t = re.sub(r"\(https?://[^)\s]*\)", "", msg)
     t = re.sub(r"https?://\S+", "", t)
-    # リンクだけの行（例「- [現場記録 2026-09-22 西ブロアー](URL)」）は数えない＝
-    #   「書き込んだ該当箇所をリンクで出せ」（専務指示 2026-09-23）に従った並びを本文と見なさない
-    link_only = re.compile(r"^\s*(?:[-・*]|\d+[.)])?\s*\[[^\]]*\]\s*$")
-    lines = [l for l in t.split("\n") if l.strip() and not link_only.match(l)]
-    return len(lines), len("".join(lines).replace(" ", "").replace("　", ""))
+    lines = [l for l in t.split("\n") if l.strip()]
+    return len(lines), len("".join(t.split()))
 
 
 def has_link(msg):
