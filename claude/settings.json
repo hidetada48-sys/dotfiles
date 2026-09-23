@@ -114,6 +114,10 @@
           },
           {
             "type": "command",
+            "command": "bash ~/.claude/scripts/nippo-logs-alert.sh"
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/scripts/juyu-weekly-alert.sh"
           },
           {
