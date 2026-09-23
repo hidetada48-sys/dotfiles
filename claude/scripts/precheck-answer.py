@@ -52,12 +52,12 @@ def main():
             nl, nc = m.body_size(msg)
             ll, lc = m.LINK_LINE_LIMIT, m.LINK_CHAR_LIMIT
         except Exception:
-            nl, nc, ll, lc = len(lines), chars, 5, 250
+            nl, nc, ll, lc = len(lines), chars, 3, 120
         print(f"（リンクあり）URLを除く本文 行数 {nl}/{ll}　文字数 {nc}/{lc}")
         if nl <= ll and nc <= lc:
             print("OK：このまま出してよい")
             return 0
-        print("NG：レポートがあるのに本文が長い。結論1行＋リンク＋判断を仰ぐこと（1〜3行）だけにする")
+        print("NG：レポートがあるのに本文が長い。結論1行・リンク1行・伺い1行だけにし、数字・理由・直し方は書き写さない")
         return 1
     if len(lines) <= line_limit and chars <= char_limit:
         print("OK：このまま出してよい")

@@ -25,8 +25,10 @@ CHAR_LIMIT = int(os.environ.get("HTML_GATE_CHAR_LIMIT", "400"))
 # ★2026-09-23 追加（専務指示・恒久）：レポートを作ったのにチャットで中身をだらだら書いていた。
 #   リンクがあれば無条件合格だった抜け道を塞ぐ。リンクがある回答は、URL部分を除いて
 #   行数5・文字数250まで（＝結論1行＋リンク＋判断を仰ぐこと1〜3行）。
-LINK_LINE_LIMIT = int(os.environ.get("HTML_GATE_LINK_LIMIT", "5"))
-LINK_CHAR_LIMIT = int(os.environ.get("HTML_GATE_LINK_CHAR_LIMIT", "250"))
+# ★2026-09-24 強化（専務指示）：5行・250字では結論行・伺い行にレポートの数字や直し方を書き写しても通っていた。
+#   リンクがある回答は 結論1行・リンク1行・伺い1行＝URLを除き 行数3・文字数120 まで。
+LINK_LINE_LIMIT = int(os.environ.get("HTML_GATE_LINK_LIMIT", "3"))
+LINK_CHAR_LIMIT = int(os.environ.get("HTML_GATE_LINK_CHAR_LIMIT", "120"))
 
 
 def body_size(msg):
