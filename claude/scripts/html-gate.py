@@ -39,6 +39,17 @@ def body_size(msg):
     return len(lines), len("".join(t.split()))
 
 
+def digit_lines(msg):
+    """リンク（8830/8831）を含まない行のうち、数字（半角・全角）を含む行の数"""
+    n = 0
+    for l in msg.split("\n"):
+        if not l.strip() or has_link(l):
+            continue
+        if re.search(r"[0-9０-９]", l):
+            n += 1
+    return n
+
+
 def has_link(msg):
     return "127.0.0.1:8830" in msg or "127.0.0.1:8831/open" in msg
 
@@ -109,14 +120,18 @@ def main():
         out("skip")
     if has_link(msg):   # レポート（8830）・エクセル（8831）のリンクあり＝本文は短く（2026-09-23）
         nl, nc = body_size(msg)
-        if nl <= LINK_LINE_LIMIT and nc <= LINK_CHAR_LIMIT:
+        # ★2026-09-24 追加（専務指示「機械で強制的に守れるようにしろ」）：3行・120字に収まっていても、
+        #   結論や伺いの行にレポートの数字を書き写していた。リンクの行以外に数字があれば止める。
+        nd = digit_lines(msg)
+        if nl <= LINK_LINE_LIMIT and nc <= LINK_CHAR_LIMIT and nd == 0:
             out("skip")
         for kw in SKIP_WORDS:
             if kw in lu:
                 out("skip")
         key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
         # 3列目の先頭 L ＝「リンクはあるが本文が長い」
-        sys.stdout.write("block\t" + key + "\tL" + (str(nl) if nl > LINK_LINE_LIMIT else str(nc) + "c") + "\n")
+        why = str(nl) if nl > LINK_LINE_LIMIT else (str(nc) + "c" if nc > LINK_CHAR_LIMIT else str(nd) + "d")
+        sys.stdout.write("block\t" + key + "\tL" + why + "\n")
         sys.exit(0)
 
     lines = [l for l in msg.split("\n") if l.strip()]

@@ -50,11 +50,12 @@ def main():
             m = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(m)
             nl, nc = m.body_size(msg)
+            nd = m.digit_lines(msg)
             ll, lc = m.LINK_LINE_LIMIT, m.LINK_CHAR_LIMIT
         except Exception:
-            nl, nc, ll, lc = len(lines), chars, 3, 120
-        print(f"（リンクあり）URLを除く本文 行数 {nl}/{ll}　文字数 {nc}/{lc}")
-        if nl <= ll and nc <= lc:
+            nl, nc, nd, ll, lc = len(lines), chars, 0, 3, 120
+        print(f"（リンクあり）URLを除く本文 行数 {nl}/{ll}　文字数 {nc}/{lc}　数字のある行 {nd}/0")
+        if nl <= ll and nc <= lc and nd == 0:
             print("OK：このまま出してよい")
             return 0
         print("NG：レポートがあるのに本文が長い。結論1行・リンク1行・伺い1行だけにし、数字・理由・直し方は書き写さない")

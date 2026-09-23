@@ -63,6 +63,15 @@
             "command": "bash ~/.claude/scripts/gdrive-upload.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/run-python.sh ~/.claude/hooks/report-answer-lock.py"
+          }
+        ]
       }
     ],
     "SessionStart": [
