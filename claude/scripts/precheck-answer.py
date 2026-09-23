@@ -60,6 +60,16 @@ def main():
             return 0
         print("NG：レポートがあるのに本文が長い。結論1行・リンク1行・伺い1行だけにし、数字・理由・直し方は書き写さない")
         return 1
+    try:                                                   # 箇条書き・表の一覧はレポート（html-gate.py と同じ基準・2026-09-24）
+        spec = importlib.util.spec_from_file_location("html_gate", GATE)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        nb, lim = m.bullet_lines(msg), m.BULLET_LIMIT
+    except Exception:
+        nb, lim = 0, 2
+    if nb >= lim:
+        print(f"NG：箇条書き・表の一覧が {nb} 行ある。一覧はレポートにしてリンクだけ出す")
+        return 1
     if len(lines) <= line_limit and chars <= char_limit:
         print("OK：このまま出してよい")
         return 0

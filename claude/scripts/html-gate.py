@@ -58,6 +58,15 @@ def prechecked(msg):
         return False
 
 
+BULLET_LIMIT = int(os.environ.get("HTML_GATE_BULLET_LIMIT", "2"))
+BULLET_RE = re.compile(r"^\s*(?:[・\-\*•●○▶]\s*|\d{1,2}[\.\)．）]\s*|〔\d{1,2}〕|[①-⑳]|[(（]\d{1,2}[)）])")
+
+
+def bullet_lines(msg):
+    """箇条書きの行（・／-／1. ／〔1〕／①／(1) で始まる行）の数。表の行（| で始まる）も一覧として数える"""
+    return sum(1 for l in msg.split("\n") if l.strip() and (BULLET_RE.match(l) or l.lstrip().startswith("|")))
+
+
 def digit_lines(msg):
     """リンク（8830/8831）を含まない行のうち、数字（半角・全角）を含む行の数"""
     n = 0
@@ -162,6 +171,13 @@ def main():
 
     lines = [l for l in msg.split("\n") if l.strip()]
     chars = len("".join(msg.split()))          # 空白・改行を除いた文字数
+    # ★2026-09-24 追加（専務指示）：短くても箇条書きの一覧（手順・案の列挙）はレポートにする。
+    #   行数・文字数だけを見ていたため、3項目の箇条書きがチャットに出ていた。
+    nb = bullet_lines(msg)
+    if nb >= BULLET_LIMIT and not any(kw in lu for kw in SKIP_WORDS):
+        key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
+        sys.stdout.write("block\t" + key + "\tB" + str(nb) + "\n")
+        sys.exit(0)
     if len(lines) <= LIMIT and chars <= CHAR_LIMIT:
         out("skip")
 
