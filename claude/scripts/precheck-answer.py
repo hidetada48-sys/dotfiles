@@ -59,6 +59,9 @@ def main():
             print("OK：このまま出してよい")
             return 0
         print("NG：レポートがあるのに本文が長い。結論1行・リンク1行・伺い1行だけにし、数字・理由・直し方は書き写さない")
+        for l in msg.split("\n"):                          # 数字のある行を名指し（「9月」「5x」など名前の中の数字も不可・2026-09-26）
+            if l.strip() and not m.has_link(l) and __import__("re").search(r"[0-9０-９]", l):
+                print("  数字のある行：" + l.strip())
         return 1
     try:                                                   # 箇条書き・表の一覧はレポート（html-gate.py と同じ基準・2026-09-24）
         spec = importlib.util.spec_from_file_location("html_gate", GATE)

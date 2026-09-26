@@ -5,11 +5,11 @@
 #   Stop フック（Claudeが応答を終える瞬間）で直前の回答テキストを見て、
 #   ・本文が長い（空行を除く行数が10超、**または**空白を除く文字数が400超）
 #   ・なのにレポートURL（127.0.0.1:8830）が入っていない
-#   なら exit 2 で終了を差し止める。→ レポート化してURLを出すまで会話を終われない。
+#   なら違反として記録する（2026-09-26 から止めない＝画面に警告を出さない。記録は次の指示で
+#   html-rule-reminder.sh が Claude にだけ伝える）。
 #
 # 判定の中身は html-gate.py（同じフォルダ）。例外＝コードブロックを含む回答／
 # 直近の専務の指示に「チャットで」「HTML不要」等がある場合は鳴らさない。
-# 無限ループ防止：同一プロンプトで2回まで。
 #
 # ★2026-09-02 修正（Windowsで一度も鳴っていなかった件）
 #   ・Windowsの `python3` は Microsoft Store のダミーで、スクリプトを実行しても
@@ -60,21 +60,10 @@ if [ "$IS_WIN" = "1" ] && command -v cygpath >/dev/null 2>&1; then
     JUDGE_ARG="$(cygpath -w "$JUDGE")"
 fi
 
-# --- pythonが無い＝判定不能。黙って通さず、止めて知らせる（1プロンプト1回だけ）---
+# --- pythonが無い＝判定不能。止めずに記録し、次の指示で Claude に伝える（2026-09-26）---
 if [ -z "$PY" ]; then
-    NOPY_FILE="$STATE_DIR/html-gate_nopython.count"
-    N=0
-    [ -f "$NOPY_FILE" ] && N=$(cat "$NOPY_FILE" 2>/dev/null)
-    case "$N" in ''|*[!0-9]*) N=0 ;; esac
-    N=$((N + 1)); echo "$N" > "$NOPY_FILE"
-    [ "$N" -gt 1 ] && exit 0
-    cat >&2 <<'MSG'
-[HTML鉄則] 関門が判定できません（動作するpythonが見つからない）。
-このままではHTML鉄則が無検査で素通りします。python を用意するか、
-回答は必ず「結論1行＋要点3〜5行＋レポートURL」の形で自主的に守ってください。
-※この関門は ~/.claude/scripts/html-gate.sh
-MSG
-    exit 2
+    printf '%s\t%s\t\n' "$(date '+%Y-%m-%d %H:%M')" "関門が判定できない（動く python が無い）＝返答は自分で3行・120字・数字なしを守る" >> "$STATE_DIR/html-gate_pending.log" 2>/dev/null
+    exit 0
 fi
 rm -f "$STATE_DIR/html-gate_nopython.count" 2>/dev/null
 
@@ -84,60 +73,25 @@ KEY=$(printf '%s' "$RESULT" | cut -f2)
 NLINES=$(printf '%s' "$RESULT" | cut -f3)
 [ "$VERDICT" != "block" ] && exit 0
 
-# --- 無限ループ防止：同一プロンプトで3回まで ---
-# ★2026-09-02 修正（欠陥C）：以前は2回で「黙って」素通りしていた＝粘れば通る抜け道。
-#   会話が詰まる事故は防ぎたいので上限自体は残すが、解除するときは必ず記録に残し、
-#   次のプロンプトの冒頭で表示する（html-rule-reminder.sh）＝黙って通ることだけを潰す。
-SAFE=$(printf '%s' "$KEY" | tr -c 'A-Za-z0-9_.-' '_')
-COUNT_FILE="$STATE_DIR/html-gate_${SAFE}.count"
-N=0
-[ -f "$COUNT_FILE" ] && N=$(cat "$COUNT_FILE" 2>/dev/null)
-case "$N" in ''|*[!0-9]*) N=0 ;; esac
-N=$((N + 1))
-echo "$N" > "$COUNT_FILE"
-if [ "$N" -gt 3 ]; then
-    # 解除して通す＝違反のまま終わる。黙って通さず bypass ログに残す。
-    HEAD=$(printf '%s' "$INPUT" | "$PY" -c 'import sys,json;d=json.load(sys.stdin);m=d.get("last_assistant_message") or "";print(m.replace(chr(10)," ")[:80])' 2>/dev/null)
-    printf '%s\t%s行\t%s\t%s\n' "$(date '+%Y-%m-%d %H:%M')" "${NLINES:-?}" "$KEY" "$HEAD" \
-        >> "$STATE_DIR/html-gate_bypass.log" 2>/dev/null
-    exit 0
-fi
-
-case "$NLINES" in B*)
-cat >&2 <<'MSG'
-[一覧はレポート] 箇条書き・表の一覧（2項目以上）を、レポートのリンクなしでチャットに書いています。
-手順・案・一覧はレポートにして、チャットは「結論1行・リンク1行・伺い1行」だけにする（専務指示 2026-09-24）。止められても言い直さない。
-※この関門は ~/.claude/scripts/html-gate.sh
-MSG
-exit 2 ;;
+# ★2026-09-26 変更（専務指示「決まりを守れるよう改善したうえで、警告文は出さない」）：
+#   この関門は返答が画面に出た「後」に動く。止める（exit 2）と画面に「Stop hook error」と警告文が出て、
+#   会話が続くので Claude がもう一言足し、それも専務の画面に出ていた。止めても読まれた後なので意味が無い。
+#   そこで止めずに違反を記録だけし（画面には何も出さない）、次の指示のときに
+#   html-rule-reminder.sh が Claude にだけ伝える。守る側の本命は「出す前に precheck-answer.py で数える」。
+#   設計＝mino-sakura-hq/docs/plans/2026-09-26-返答の決まりを守る仕組みの改善-design.md
+case "$NLINES" in
+  B*) WHY="一覧をチャットに書いた（箇条書き・表の行が${NLINES#B}）。一覧はレポートにしてリンクだけ出す" ;;
+  P*) WHY="数えずに出した（precheck-answer.py で OK になった下書きと同じ文ではない）" ;;
+  L*) R="${NLINES#L}"
+      case "$R" in
+        *c) WHY="リンク付きなのに本文が${R%c}字（上限120字）" ;;
+        *d) WHY="リンク付きなのにリンクの行以外に数字がある行が${R%d}（名前の中の数字も不可）" ;;
+        *)  WHY="リンク付きなのに本文が${R}行（上限3行）" ;;
+      esac ;;
+  *)  WHY="長い返答（${NLINES}）をレポートにせずチャットに書いた" ;;
 esac
-
-case "$NLINES" in P*)
-cat >&2 <<'MSG'
-[数えずに出した] 4行を超える回答なのに、precheck-answer.py で数えた下書きと同じ文ではありません。
-答えは先にスクラッチパッドの下書きに書き、python ~/.claude/scripts/precheck-answer.py <下書き> で数えてから、
-OK になった下書きをそのまま出す（長ければレポート、短ければチャット＝専務指示 2026-09-24）。止められても言い直さない。
-※この関門は ~/.claude/scripts/html-gate.sh
-MSG
-exit 2 ;;
-esac
-
-case "$NLINES" in L*)
-cat >&2 <<'MSG'
-[HTML鉄則] レポートのリンクを出したのに、チャットにも中身を書いています（URLを除き 行数3超・文字数120超、またはリンク以外の行に数字）。
-レポートを作ったらチャットは「結論1行・リンク1行・伺い1行」だけ。
-数字・理由・直し方・経緯はレポートの中に書き、結論や伺いの行に書き写さない（専務指示 2026-09-23／09-24 強化）。
-※この関門は ~/.claude/scripts/html-gate.sh
-MSG
-exit 2 ;;
-esac
-
-cat >&2 <<'MSG'
-[HTML鉄則] いまの回答は長い（行数10超 または 文字数400超）のに、レポートURLがありません。
-CLAUDE.md「★回答提示の絶対ルール」＝長い回答・表・分類・一覧・複数案の比較は
-md に書いて report_html.py で変換し、[題名](http://127.0.0.1:8830/…) の
-リンク付きURLだけをチャットに出すこと（中身の平文貼り付けは違反）。
-チャットに残すのは 結論1行＋要点3〜5行＋リンク。
-※この関門は ~/.claude/scripts/html-gate.sh（past_mistakes M-013・M-015）
-MSG
-exit 2
+HEAD=$(printf '%s' "$INPUT" | "$PY" -c 'import sys,json;d=json.loads(sys.stdin.buffer.read().decode("utf-8","replace"));m=d.get("last_assistant_message") or "";print(m.replace(chr(10)," ")[:60])' 2>/dev/null)
+REC="$(date '+%Y-%m-%d %H:%M')	${WHY}	${HEAD}"
+printf '%s\n' "$REC" >> "$STATE_DIR/html-gate_pending.log" 2>/dev/null     # 次の指示で Claude に伝えて消す
+printf '%s\n' "$REC" >> "$STATE_DIR/html-gate_violations.log" 2>/dev/null  # 消さない＝回数を後から数える
+exit 0

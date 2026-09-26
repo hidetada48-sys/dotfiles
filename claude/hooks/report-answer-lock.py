@@ -36,12 +36,14 @@ def main():
     link = urls[0] if urls else "http://127.0.0.1:8830/index.html"
     msg = (
         "【レポートを作った＝答えの型を固定（機械の決まり・例外なし）】\n"
-        "チャットに書いてよいのは次の3行だけ。数字（日付・金額・重量・件数）を結論と伺いの行に書かない。"
+        "チャットに書いてよいのは次の3行だけ。URLを除いて合計120字まで。"
+        "リンクの行以外に数字を一切書かない（「9月」「5x」のような名前の中の数字も不可）。"
         "理由・直し方・経緯・比較はレポートの中にだけ書く。\n"
         "1行目：結論（数字なし・40字以内）\n"
         f"2行目：[題名]({link})\n"
         "3行目：伺い（数字なし・「レポートの〇〇でよいですか？」の形）\n"
-        "これを外すと Stop の関門（html-gate.py）が止める。止められても言い直さない。"
+        "出す前に下書きを python ~/.claude/scripts/precheck-answer.py <下書き> で数え、OKの下書きをそのまま出す"
+        "（数えずに出すと違反として記録される）。"
     )
     out = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": msg}}
     sys.stdout.write(json.dumps(out, ensure_ascii=False))

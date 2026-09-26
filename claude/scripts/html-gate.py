@@ -148,7 +148,9 @@ def main():
         out("skip")
     # ★2026-09-24 追加（専務指示「表示する前に数えろ」）：長くならないと思い込むと数えずに出していた。
     #   4行を超える回答は、precheck-answer.py で数えて OK になった下書きと同じ文でなければ止める。
-    if len([l for l in msg.split("\n") if l.strip()]) > PRECHECK_MIN_LINES and not prechecked(msg):
+    # ★2026-09-26 追加：リンク付きの返答は3行なので数えずに出せてしまい、字数・名前の中の数字（「9月」「5x」）で
+    #   落ち続けた。リンク付きの返答も、行数によらず数えた下書きと同じ文でなければ違反にする。
+    if not has_link(msg) and len([l for l in msg.split("\n") if l.strip()]) > PRECHECK_MIN_LINES and not prechecked(msg):
         if not any(kw in lu for kw in SKIP_WORDS):
             key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
             sys.stdout.write("block\t" + key + "\tP\n")
@@ -159,7 +161,11 @@ def main():
         #   結論や伺いの行にレポートの数字を書き写していた。リンクの行以外に数字があれば止める。
         nd = digit_lines(msg)
         if nl <= LINK_LINE_LIMIT and nc <= LINK_CHAR_LIMIT and nd == 0:
-            out("skip")
+            if prechecked(msg) or any(kw in lu for kw in SKIP_WORDS):
+                out("skip")
+            key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
+            sys.stdout.write("block\t" + key + "\tP\n")     # 基準は守れているが数えずに出した（2026-09-26）
+            sys.exit(0)
         for kw in SKIP_WORDS:
             if kw in lu:
                 out("skip")
