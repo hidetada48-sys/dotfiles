@@ -28,7 +28,7 @@ def main():
     mds = re.findall(r'["\']?([^\s"\']+\.md)["\']?', cmd)
     urls = []
     for m in mds:
-        p = m.replace("\\", "/")
+        p = re.sub(r"^\w+=", "", m).replace("\\", "/")      # f=docs/…md のような変数への代入を外す（2026-09-26）
         for root in ("mino-sakura-hq/",):
             if root in p:
                 p = p.split(root, 1)[1]
