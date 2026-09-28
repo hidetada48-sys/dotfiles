@@ -83,6 +83,43 @@ def main():
     return 1
 
 
+def dead_links(msg):
+    """下書きの中のリンクのうち、開けないものを [(URL, 理由)] で返す（2026-09-29 専務指摘
+    「エクセルをリンクで開けるかのように提示するが、全て開けませんとなっている」）。
+    8831（エクセル）は受付と同じ判定 tools/xlsx_opener.openable() で確かめる＝叩くとエクセルが開くので叩かない。
+    8830（レポート）は配信サーバーに実際に取りに行く。受付・サーバーが止まっているときも「開けない」とする"""
+    import re
+    import urllib.parse
+    import urllib.request
+    bad = []
+    urls = re.findall(r"\]\((http://127\.0\.0\.1:883[01]/[^)]+)\)", msg)   # [題名](URL) は ) まで＝空白を含んでも切らない
+    rest = re.sub(r"\]\(http://127\.0\.0\.1:883[01]/[^)]+\)", "", msg)
+    urls += re.findall(r"http://127\.0\.0\.1:883[01]/[^)\s>\]]+", rest)   # 素のURL
+    repo = next((d for d in [Path.cwd(), *Path.cwd().parents] if (d / "tools/xlsx_opener.py").exists()),
+                Path.home() / "mino-sakura-hq")
+    for u in urls:
+        if ":8831/" in u:
+            q = urllib.parse.urlparse(u).query
+            rel = (urllib.parse.parse_qs(q).get("f") or [""])[0]
+            try:
+                spec = importlib.util.spec_from_file_location("xlsx_opener", repo / "tools/xlsx_opener.py")
+                m = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(m)
+                code, title, why, _ = m.openable(rel)
+            except Exception as e:
+                code, why = 0, f"受付の判定を読めない（{e}）"
+            if code != 200:
+                bad.append((u, why))
+        else:
+            pu = urllib.parse.urlparse(u)
+            safe = urllib.parse.urlunparse(pu._replace(path=urllib.parse.quote(urllib.parse.unquote(pu.path)), fragment=""))
+            try:
+                urllib.request.urlopen(safe, timeout=5)
+            except Exception as e:
+                bad.append((u, f"レポートが開けない（{e}）"))
+    return bad
+
+
 def record_ok(path):
     """OK になった下書きの指紋を残す＝関門（html-gate.py）が「数えてから出したか」を照合する（2026-09-24）"""
     import datetime
@@ -169,6 +206,13 @@ def to_report(path, title):
 if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "--report":
         sys.exit(to_report(sys.argv[2], sys.argv[3] if len(sys.argv) >= 4 else "回答"))
+    bad = dead_links(Path(sys.argv[1]).read_text(encoding="utf-8")) if len(sys.argv) >= 2 else []
+    if bad:   # 開けないリンクを開けるかのように出さない（削った・削らないとは別の話なので NG の控えには残さない）
+        print("NG：開けないリンクがある。リンク先を直して（合格印・置き場・配信）から出す：")
+        for u, why in bad:
+            print(f"  {u}")
+            print(f"    → {why}")
+        sys.exit(1)
     rc = main()
     if rc == 0 and len(sys.argv) >= 2:
         ng = trimmed_from_ng(sys.argv[1])
