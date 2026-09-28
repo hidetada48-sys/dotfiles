@@ -59,6 +59,7 @@ def main():
             print("OK：このまま出してよい")
             return 0
         print("NG：レポートがあるのに本文が長い。結論1行・リンク1行・伺い1行だけにし、数字・理由・直し方は書き写さない")
+        print("  ★チャットから外す数字・理由は、レポートの中に書いてあるかを確かめる。無ければレポートに足してから外す（黙って捨てない）")
         for l in msg.split("\n"):                          # 数字のある行を名指し（「9月」「5x」など名前の中の数字も不可・2026-09-26）
             if l.strip() and not m.has_link(l) and __import__("re").search(r"[0-9０-９]", l):
                 print("  数字のある行：" + l.strip())
@@ -71,12 +72,14 @@ def main():
     except Exception:
         nb, lim = 0, 2
     if nb >= lim:
-        print(f"NG：箇条書き・表の一覧が {nb} 行ある。一覧はレポートにしてリンクだけ出す")
+        print(f"NG：箇条書き・表の一覧が {nb} 行ある。一覧はレポートにする（削って収めるのは禁止）：")
+        print("  python ~/.claude/scripts/precheck-answer.py --report <下書き> <題名>")
         return 1
     if len(lines) <= line_limit and chars <= char_limit:
         print("OK：このまま出してよい")
         return 0
-    print("NG：削って結論1行＋要点3〜5行に収めるか、本文をレポートにしてリンクだけ出す")
+    print("NG：レポートにする（削って収めるのは禁止）。次で下書きをそのままレポートにする：")
+    print("  python ~/.claude/scripts/precheck-answer.py --report <下書き> <題名>")
     return 1
 
 
@@ -93,8 +96,89 @@ def record_ok(path):
     log.write_text("\n".join(old + [h + "\t" + stamp]) + "\n", encoding="utf-8")
 
 
+NG_DIR = Path.home() / ".claude/state/precheck_ng"
+TRIM_WINDOW_MIN = 30          # NG のあとこの分数のうちに出た、より短い似た下書きは「削って通そうとした」とみなす
+
+
+def _flat(msg):
+    return "".join(msg.split())
+
+
+def record_ng(path):
+    """NG になった下書きを控える＝このあと削って通そうとしたかを見分けるため（2026-09-28）"""
+    import datetime
+    NG_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = f"{datetime.datetime.now():%Y%m%d%H%M%S}"
+    (NG_DIR / f"{stamp}.txt").write_text(Path(path).read_text(encoding="utf-8"), encoding="utf-8")
+    for old in sorted(NG_DIR.glob("*.txt"))[:-20]:          # 直近20件だけ残す
+        old.unlink()
+
+
+def trimmed_from_ng(path):
+    """直前に NG だった下書きを削って短くしたものか（2026-09-28 専務叱責「文字数を抑えるのは本末転倒」）。
+    削ってから通すと、長さだけを数える関門は合格してしまう＝削る方向へ流れる。NG のあとは レポートにする道しか認めない"""
+    import datetime
+    import difflib
+    new = _flat(Path(path).read_text(encoding="utf-8"))
+    now = datetime.datetime.now()
+    for f in sorted(NG_DIR.glob("*.txt"), reverse=True) if NG_DIR.exists() else []:
+        try:
+            t = datetime.datetime.strptime(f.stem, "%Y%m%d%H%M%S")
+        except ValueError:
+            continue
+        if (now - t).total_seconds() > TRIM_WINDOW_MIN * 60:
+            break
+        old = _flat(f.read_text(encoding="utf-8"))
+        if len(new) < len(old) and difflib.SequenceMatcher(None, old, new).ratio() >= 0.5:
+            return f.name
+    return None
+
+
+def to_report(path, title):
+    """下書きをそのままレポート（HTML）にして、チャットに出す3行の型を表示する。
+    削らずに済むよう、レポートにする手間をゼロにする（2026-09-28）"""
+    import datetime
+    import re
+    import subprocess
+    here = Path.cwd()
+    repo = next((d for d in [here, *here.parents] if (d / "tools/report_html.py").exists()),
+                Path.home() / "mino-sakura-hq")
+    safe = re.sub(r'[\\/:*?"<>|\s]+', "_", title).strip("_") or "回答"
+    rel = f"private/answers/{datetime.datetime.now():%Y-%m-%d_%H%M}_{safe}.md"
+    out = repo / rel
+    out.parent.mkdir(parents=True, exist_ok=True)
+    body = Path(path).read_text(encoding="utf-8")
+    head = "" if body.lstrip().startswith("# ") else "# " + title + "\n\n"
+    out.write_text(head + body, encoding="utf-8")
+    py = "python" if sys.platform == "win32" else "python3"
+    r = subprocess.run([py, "tools/report_html.py", rel], cwd=repo, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
+    url = "http://127.0.0.1:8830/" + rel[:-3] + ".html"
+    ok = (repo / ".reports_html" / (rel[:-3] + ".html")).exists()
+    print(("OK：レポートにした " if ok else "NG：HTMLにできなかった ") + str(out))
+    if not ok:
+        print(r.stdout[-500:], r.stderr[-500:])
+        return 1
+    print("チャットに出すのは次の3行（結論・リンク・伺い。リンクの行以外に数字を書かない）：")
+    print("  1行目：結論")
+    print(f"  2行目：[{title}]({url})")
+    print("  3行目：伺い")
+    return 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) >= 3 and sys.argv[1] == "--report":
+        sys.exit(to_report(sys.argv[2], sys.argv[3] if len(sys.argv) >= 4 else "回答"))
     rc = main()
     if rc == 0 and len(sys.argv) >= 2:
-        record_ok(sys.argv[1])
+        ng = trimmed_from_ng(sys.argv[1])
+        if ng:
+            print(f"NG：直前に NG だった下書き（{ng}）を削って通そうとしている。削って収めるのは禁止＝レポートにする：")
+            print("  python ~/.claude/scripts/precheck-answer.py --report <下書き> <題名>")
+            print("  ★削ったのが本当に不要な重複だけなら、NG だった元の下書きをそのままレポートにする")
+            rc = 1
+        else:
+            record_ok(sys.argv[1])
+    elif rc == 1 and len(sys.argv) >= 2:
+        record_ng(sys.argv[1])
     sys.exit(rc)
