@@ -21,6 +21,13 @@ for c in python3 python; do
 done
 [ -n "$PY" ] || exit 0
 
+# 事務PCと専務PCの両方で日報アプリを動かす（2026-09-28 専務指示）：確定データはサーバーの共用フォルダに積まれるので、
+# 数える前にリポジトリへ写す（順番は必ず「写す → 数える」。共用フォルダに届かない Linux などでは黙って何もしない）
+PULL=""
+if [ -f production/scripts/nippo_server_pull.py ]; then
+  PULL=$("$PY" production/scripts/nippo_server_pull.py 2>/dev/null)
+fi
+
 N=$("$PY" production/scripts/nippo_to_logs.py --count 2>/dev/null | tr -d '')
 case "$N" in ''|*[!0-9]*) N=0 ;; esac
 # 抄き上げ重量表にまだ書いていない勤（2026-09-28：日報アプリの確定の中で書く作りをやめ、同じ耳打ちで Claude が書く）
@@ -29,10 +36,11 @@ if [ -f production/scripts/nippo_weight_sync.py ]; then
   W=$("$PY" production/scripts/nippo_weight_sync.py --count 2>/dev/null | tr -d '')
   case "$W" in ''|*[!0-9]*) W=0 ;; esac
 fi
-[ "$N" -gt 0 ] || [ "$W" -gt 0 ] || exit 0
+[ "$N" -gt 0 ] || [ "$W" -gt 0 ] || [ -n "$PULL" ] || exit 0
 
 echo ""
 echo "========== 日報の確定のあと（所感の振り分け ${N}欄／重量表に未書き込み ${W}勤） =========="
+[ -n "$PULL" ] && echo "$PULL"
 if [ "$N" -gt 0 ]; then
 echo "  ・確定済みの日報に、まだ振り分けていない所感・停止ロスがあります。"
 echo "    → 【Claudeへ・専務モード】まず「日報の未振り分けが ${N}欄あります。振り分けレポートを作りますか？」と聞き、承認を得てから"
