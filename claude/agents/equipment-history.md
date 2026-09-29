@@ -1,7 +1,7 @@
 ---
 name: equipment-history
 description: 設備・現場の不具合について「過去に同じことがなかったか」を調べる。production/案件台帳.md・logs/・analysis/・SUMMARY.md・reviews/の週次を横断し、該当案件のIDと日付と1行要約だけを返す。「前にもあったか」「似た事象を探して」「過去の履歴を調べて」「これは既存案件か新規か」と言われたときに使う。新規PRDを起こす前の重複チェックにも必ず使う。
-model: claude-sonnet-4-6
+model: sonnet
 disallowedTools: Write, Edit, NotebookEdit
 ---
 

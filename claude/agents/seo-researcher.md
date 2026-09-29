@@ -1,7 +1,7 @@
 ---
 name: seo-researcher
 description: note記事執筆のためのSEO調査エージェント。競合note記事・検索キーワード・背景情報をJina MCPで収集し、まとめて返す。note-article-generate スキルのステップ2から呼び出される。ファイルは書き込まない。
-model: claude-sonnet-4-6
+model: sonnet
 disallowedTools: Write, Edit, Bash
 ---
 

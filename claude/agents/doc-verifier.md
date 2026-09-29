@@ -1,7 +1,7 @@
 ---
 name: doc-verifier
 description: 公式ドキュメントとX記事・ブックマークの内容を照合して正確性を検証する。「公式と記事を確認して」「ソースを確かめて」「公式ドキュメントで裏取りして」「この機能は本当にある？」と言われたときに使う。新機能・スキル・設定を実装する前の事前確認にも使う。
-model: claude-sonnet-4-6
+model: sonnet
 disallowedTools: Write, Edit
 ---
 
@@ -15,9 +15,9 @@ disallowedTools: Write, Edit
 
 2. **公式ドキュメントを取得する**
    - `mcp__jina__read_url` で公式ドキュメントのURLを直接取得する
-   - URLが不明な場合は `mcp__jina__search_web` で `site:docs.anthropic.com [機能名]` を検索する
-   - Claude Code関連: https://docs.anthropic.com/ja/docs/claude-code/
-   - API関連: https://docs.anthropic.com/ja/docs/
+   - URLが不明な場合は `mcp__jina__search_web` で `site:code.claude.com [機能名]`（APIなら `site:platform.claude.com`）を検索する
+   - Claude Code関連: https://code.claude.com/docs/
+   - API関連: https://platform.claude.com/docs/
 
 3. **照合する**
    - 記事の主張と公式の記述を比較する

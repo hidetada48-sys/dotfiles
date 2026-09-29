@@ -1,7 +1,7 @@
 ---
 name: my-info-extractor
 description: 過去の会話ログ（JSONL）からテーマに関連するユーザー発言を抽出し、03_my_info.txt のドラフトを生成する。note-article-generate スキルのステップ0から呼び出される。大量のJSONLを読む重い処理をメインコンテキストから分離するためのエージェント。ファイルは書き込まない。
-model: claude-sonnet-4-6
+model: sonnet
 disallowedTools: Write, Edit
 ---
 
