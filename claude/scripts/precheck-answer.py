@@ -50,19 +50,16 @@ def main():
             m = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(m)
             nl, nc = m.body_size(msg)
-            nd = m.digit_lines(msg)
+            nd = 0   # 数字の見張りは 2026-09-30 専務決定（案A）で廃止
             ll, lc = m.LINK_LINE_LIMIT, m.LINK_CHAR_LIMIT
         except Exception:
             nl, nc, nd, ll, lc = len(lines), chars, 0, 3, 120
-        print(f"（リンクあり）URLを除く本文 行数 {nl}/{ll}　文字数 {nc}/{lc}　数字のある行 {nd}/0")
+        print(f"（リンクあり）URLを除く本文 行数 {nl}/{ll}　文字数 {nc}/{lc}")
         if nl <= ll and nc <= lc and nd == 0:
             print("OK：このまま出してよい")
             return 0
-        print("NG：レポートがあるのに本文が長い。結論1行・リンク1行・伺い1行だけにし、数字・理由・直し方は書き写さない")
+        print("NG：レポートがあるのに本文が長い。結論1行・リンク1行・伺い1行だけにし、理由・直し方は書き写さない")
         print("  ★チャットから外す数字・理由は、レポートの中に書いてあるかを確かめる。無ければレポートに足してから外す（黙って捨てない）")
-        for l in msg.split("\n"):                          # 数字のある行を名指し（「9月」「5x」など名前の中の数字も不可・2026-09-26）
-            if l.strip() and not m.has_link(l) and __import__("re").search(r"[0-9０-９]", l):
-                print("  数字のある行：" + l.strip())
         return 1
     try:                                                   # 箇条書き・表の一覧はレポート（html-gate.py と同じ基準・2026-09-24）
         spec = importlib.util.spec_from_file_location("html_gate", GATE)
@@ -196,7 +193,7 @@ def to_report(path, title):
     if not ok:
         print(r.stdout[-500:], r.stderr[-500:])
         return 1
-    print("チャットに出すのは次の3行（結論・リンク・伺い。リンクの行以外に数字を書かない）：")
+    print("チャットに出すのは次の3行（結論・リンク・伺い。レポートの中身は書き写さない）：")
     print("  1行目：結論")
     print(f"  2行目：[{title}]({url})")
     print("  3行目：伺い")

@@ -159,7 +159,7 @@ def main():
         nl, nc = body_size(msg)
         # ★2026-09-24 追加（専務指示「機械で強制的に守れるようにしろ」）：3行・120字に収まっていても、
         #   結論や伺いの行にレポートの数字を書き写していた。リンクの行以外に数字があれば止める。
-        nd = digit_lines(msg)
+        nd = 0   # 数字の見張りは 2026-09-30 専務決定（案A）で廃止。digit_lines は残すが使わない
         if nl <= LINK_LINE_LIMIT and nc <= LINK_CHAR_LIMIT and nd == 0:
             if prechecked(msg) or any(kw in lu for kw in SKIP_WORDS):
                 out("skip")
