@@ -62,9 +62,23 @@ BULLET_LIMIT = int(os.environ.get("HTML_GATE_BULLET_LIMIT", "2"))
 BULLET_RE = re.compile(r"^\s*(?:[・\-\*•●○▶]\s*|\d{1,2}[\.\)．）]\s*|〔\d{1,2}〕|[①-⑳]|[(（]\d{1,2}[)）])")
 
 
+# 行の途中に並べた番号（「直し方：〔1〕…〔2〕…」）も一覧として数える（2026-10-01 専務叱責：1行に詰めて一覧の見張りをすり抜けた）
+INLINE_ENUM_RE = re.compile(r"〔\d{1,2}〕|[①-⑳]|[(（]\d{1,2}[)）]")
+
+
 def bullet_lines(msg):
-    """箇条書きの行（・／-／1. ／〔1〕／①／(1) で始まる行）の数。表の行（| で始まる）も一覧として数える"""
-    return sum(1 for l in msg.split("\n") if l.strip() and (BULLET_RE.match(l) or l.lstrip().startswith("|")))
+    """箇条書きの行（・／-／1. ／〔1〕／①／(1) で始まる行）の数。表の行（| で始まる）も一覧として数える。
+    行の途中に番号が2つ以上並ぶ行は、その番号の数だけ一覧の項目として数える"""
+    n = 0
+    for l in msg.split("\n"):
+        if not l.strip():
+            continue
+        inline = len(INLINE_ENUM_RE.findall(l))
+        if inline >= 2:
+            n += inline
+        elif BULLET_RE.match(l) or l.lstrip().startswith("|"):
+            n += 1
+    return n
 
 
 def digit_lines(msg):
