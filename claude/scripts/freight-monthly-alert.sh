@@ -36,7 +36,7 @@ S_TO=$(date -u -d "${THIS_MONTH}-01 -1 day" +%Y-%m-%d 2>/dev/null)
 # 原料日誌が対象月まで取り込めているか（未取込なら原料運賃が欠ける）
 GENRYO_NOTE=""
 if ls production/inbox/原料/*.pdf >/dev/null 2>&1; then
-  GENRYO_NOTE="  ⚠️ 原料日誌に未取込のPDFがあります。先に取り込むこと（原料運賃が欠けます）。"
+  GENRYO_NOTE="  ⚠️ 原料日誌に未取込のPDFがあります。先に取り込むこと（取り込むまで計算表は作らない）。"
 fi
 
 echo ""
@@ -45,8 +45,9 @@ echo "  対象月：${TARGET}分／計算表 未作成"
 echo "    アイカワ運輸：積込日 ${A_FROM} 〜 ${A_TO}"
 echo "    櫻井商事　　：積込日 ${S_FROM} 〜 ${S_TO}"
 echo ""
-echo "  → 専務の承認を得てから業務DBを読むこと（無断取得は禁止）。"
-echo "     承認の前に聞くこと：前月末までの積込分の売上伝票は入力済みか（未入力なら待つ）。"
+echo "  → 専務の承認を得てから業務DBを読むこと（無断取得は禁止）。承認が出たら伝票の入力を伺わず計算して出す。"
+echo "     順番＝耳打ち → データ確認（原料日誌が期間の終わりまで入っているか）→ 運賃計算。"
+echo "     原料日誌が足りなければ計算表は作らない（freight_calc.py も止まる）。専務にスキャンをサーバーへ置くよう伺いの本筋で依頼する。"
 [ -n "$GENRYO_NOTE" ] && echo "$GENRYO_NOTE"
 echo ""
 echo "  手順：python finance/scripts/freight_calc.py ${TARGET}"
