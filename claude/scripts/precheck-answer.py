@@ -6,7 +6,7 @@ Stopフックの HTML関門（~/.claude/scripts/html-gate.py）は、回答を�
 このスクリプトで同じ基準を先に当ててから出す。
 
 基準は html-gate.py と同じ（あればそこから読み込む＝基準を二重に持たない）：
-  空行を除く行数が10超、または空白・改行を除く文字数が400超 で、
+  空行を除く行数が10超、または空白・改行を除く文字数が300超 で、
   レポートURL（127.0.0.1:8830）もエクセルのリンク（127.0.0.1:8831/open）も無い → NG
 使い方：python ~/.claude/scripts/precheck-answer.py <下書きファイル>
   OK なら exit 0、NG なら exit 1（行数・文字数と直し方を表示）
@@ -26,7 +26,7 @@ def limits():
         spec.loader.exec_module(m)
         return m.LIMIT, m.CHAR_LIMIT
     except Exception:
-        return 10, 400
+        return 10, 300
 
 
 def main():

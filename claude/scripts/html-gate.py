@@ -20,7 +20,8 @@ LIMIT = int(os.environ.get("HTML_GATE_LIMIT", "10"))
 # ★2026-09-13 追加：行数だけで見ていたため「長い段落を数行」だと素通りしていた
 #   （6段落＝6行でも中身は800字、という回答が実際に抜けた＝専務指摘）。
 #   文字数でも測る。空白・改行は数えない。
-CHAR_LIMIT = int(os.environ.get("HTML_GATE_CHAR_LIMIT", "400"))
+#   ★2026-10-01 専務指示：400字 → 300字
+CHAR_LIMIT = int(os.environ.get("HTML_GATE_CHAR_LIMIT", "300"))
 # 専務が「チャットで答えろ」と明示した場合は鳴らさない
 # ★2026-09-23 追加（専務指示・恒久）：レポートを作ったのにチャットで中身をだらだら書いていた。
 #   リンクがあれば無条件合格だった抜け道を塞ぐ。リンクがある回答は、URL部分を除いて
@@ -63,18 +64,49 @@ BULLET_RE = re.compile(r"^\s*(?:[・\-\*•●○▶]\s*|\d{1,2}[\.\)．）]\s*|
 
 
 # 行の途中に並べた番号（「直し方：〔1〕…〔2〕…」）も一覧として数える（2026-10-01 専務叱責：1行に詰めて一覧の見張りをすり抜けた）
-INLINE_ENUM_RE = re.compile(r"〔\d{1,2}〕|[①-⑳]|[(（]\d{1,2}[)）]")
+# ただし数えるのは、番号が1から順に並び（1・2・3…）、番号と番号の間の中身が平均 INLINE_SEG_MIN 字以上のときだけ
+# （2026-10-01 専務承認＝案B。「②リール明細・⑥リール」のシート名や「①コミット ②プッシュ ③記憶」の呼び名を一覧と数えていた）
+INLINE_ENUM_RE = re.compile(r"〔(\d{1,2})〕|([①-⑳])|[(（](\d{1,2})[)）]")
+INLINE_SEG_MIN = int(os.environ.get("HTML_GATE_INLINE_SEG_MIN", "15"))
+
+
+def _enum_no(m):
+    """番号の印から数を取り出す（〔3〕→3・③→3・(3)→3）"""
+    if m.group(1):
+        return int(m.group(1))
+    if m.group(2):
+        return ord(m.group(2)) - ord("①") + 1
+    return int(m.group(3))
+
+
+def inline_items(line):
+    """行の途中に1から順に並んだ番号の項目数（中身が短い呼び名の並びは0）"""
+    ms = list(INLINE_ENUM_RE.finditer(line))
+    ks = [_enum_no(m) for m in ms]
+    best, run, start = None, 0, None
+    for i, k in enumerate(ks):
+        if k == 1:
+            run, start = 1, i
+        elif start is not None and k == run + 1:
+            run += 1
+        if run >= 2:
+            best = (start, start + run - 1)
+    if not best:
+        return 0
+    a, b = best
+    segs = [ms[i + 1].start() - ms[i].end() for i in range(a, b)] + [min(len(line) - ms[b].end(), 60)]
+    return b - a + 1 if sum(segs) / len(segs) >= INLINE_SEG_MIN else 0
 
 
 def bullet_lines(msg):
     """箇条書きの行（・／-／1. ／〔1〕／①／(1) で始まる行）の数。表の行（| で始まる）も一覧として数える。
-    行の途中に番号が2つ以上並ぶ行は、その番号の数だけ一覧の項目として数える"""
+    行の途中に1から順に番号を並べた行は、その番号の数だけ一覧の項目として数える"""
     n = 0
     for l in msg.split("\n"):
         if not l.strip():
             continue
-        inline = len(INLINE_ENUM_RE.findall(l))
-        if inline >= 2:
+        inline = inline_items(l)
+        if inline:
             n += inline
         elif BULLET_RE.match(l) or l.lstrip().startswith("|"):
             n += 1
