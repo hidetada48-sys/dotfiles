@@ -200,9 +200,45 @@ def to_report(path, title):
     return 0
 
 
+JARGON = Path(__file__).with_name("jargon_words.txt")
+
+
+def jargon_hits(msg):
+    """私が作った呼び名（jargon_words.txt）が、言い換え（＝）の無い行に出ていれば (語, 行) を返す。
+    専務指示 2026-10-02「お前独自の言い回し・単語がふんだんに出てくる。だから言いたいことが入ってこない」"""
+    if not JARGON.exists():
+        return []
+    words = [w.strip() for w in JARGON.read_text(encoding="utf-8").splitlines()
+             if w.strip() and not w.lstrip().startswith("#")]
+    hits = []
+    for line in msg.splitlines():
+        if "＝" in line:
+            continue
+        body = __import__("re").sub(r"\(https?://[^)]*\)|`[^`]*`", "", line)   # URL とファイル名（`…`）は見ない
+        for w in words:
+            if w in body:
+                hits.append((w, line.strip()[:60]))
+    return hits
+
+
+def stop_on_jargon(path):
+    hits = jargon_hits(Path(path).read_text(encoding="utf-8"))
+    if not hits:
+        return False
+    print("NG：私が作った呼び名が出ている。専務がふだん使う言葉（商品名・帳票名・個数など）に言い換えるか、")
+    print("    同じ行に「＝○○のこと」と言い換えを添えてから出す（~/.claude/scripts/jargon_words.txt）：")
+    for w, line in hits[:10]:
+        print(f"  「{w}」 … {line}")
+    return True
+
+
 if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "--report":
+        if stop_on_jargon(sys.argv[2]):   # レポートにする前に言い換える（呼び名のままレポートにしない）
+            sys.exit(1)
         sys.exit(to_report(sys.argv[2], sys.argv[3] if len(sys.argv) >= 4 else "回答"))
+    if len(sys.argv) >= 2 and stop_on_jargon(sys.argv[1]):   # 言い換えは削るのとは別＝NG の控えには残さない
+        sys.exit(1)
     bad = dead_links(Path(sys.argv[1]).read_text(encoding="utf-8")) if len(sys.argv) >= 2 else []
     if bad:   # 開けないリンクを開けるかのように出さない（削った・削らないとは別の話なので NG の控えには残さない）
         print("NG：開けないリンクがある。リンク先を直して（合格印・置き場・配信）から出す：")
