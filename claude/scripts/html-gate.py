@@ -40,7 +40,9 @@ def body_size(msg):
     return len(lines), len("".join(t.split()))
 
 
-PRECHECK_MIN_LINES = int(os.environ.get("HTML_GATE_PRECHECK_MIN_LINES", "4"))
+# ★2026-10-04 専務指示「4行ルールを直せ」：4行以内は測らずに出してよいと読まれ、4行・317字が測られずに出た。
+#   0＝行数によらず、測った下書きと同じ文でない返答はすべて違反として記録する
+PRECHECK_MIN_LINES = int(os.environ.get("HTML_GATE_PRECHECK_MIN_LINES", "0"))
 PRECHECK_LOG = os.path.join(os.path.expanduser("~"), ".claude", "state", "precheck_ok.txt")
 
 

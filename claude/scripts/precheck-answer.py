@@ -178,6 +178,9 @@ def to_report(path, title):
     repo = next((d for d in [here, *here.parents] if (d / "tools/report_html.py").exists()),
                 Path.home() / "mino-sakura-hq")
     safe = re.sub(r'[\\/:*?"<>|\s]+', "_", title).strip("_") or "回答"
+    # ★2026-10-04 専務「このリンクが開けません」：題名をそのままファイル名にするとURLが長くなり、
+    #   ターミナルで折り返されてクリックしても開けない。ファイル名の題名部分は12字までにする（見出しは題名のまま）
+    safe = safe[:12].rstrip("_・")
     rel = f"private/answers/{datetime.datetime.now():%Y-%m-%d_%H%M}_{safe}.md"
     out = repo / rel
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -195,7 +198,7 @@ def to_report(path, title):
         return 1
     print("チャットに出すのは次の3行（結論・リンク・伺い。レポートの中身は書き写さない）：")
     print("  1行目：結論")
-    print(f"  2行目：[{title}]({url})")
+    print(f"  2行目：[{safe}]({url})")   # 見出しも短く＝見出しとURLが1行に並んで折り返されないように（2026-10-04）
     print("  3行目：伺い")
     return 0
 
