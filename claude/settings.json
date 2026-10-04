@@ -91,51 +91,7 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/scripts/hr-leave-alert.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/hr-annual-event-alert.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/hr-law-watch-alert.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/weekly-startup-check.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/sales-monthly-alert.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/jumbo-weight-alert.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/stock-month-end-alert.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/production-nisshi-alert.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/nippo-logs-alert.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/juyu-weekly-alert.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/freight-monthly-alert.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/scripts/monthly-data-alert.sh"
+            "command": "bash ~/.claude/scripts/teirei-alert.sh"
           },
           {
             "type": "command",
