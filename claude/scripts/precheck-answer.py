@@ -6,8 +6,8 @@ Stopフックの HTML関門（~/.claude/scripts/html-gate.py）は、回答を�
 このスクリプトで同じ基準を先に当ててから出す。
 
 基準は html-gate.py と同じ（あればそこから読み込む＝基準を二重に持たない）：
-  空行を除く行数が10超、または空白・改行を除く文字数が300超 で、
-  レポートURL（127.0.0.1:8830）もエクセルのリンク（127.0.0.1:8831/open）も無い → NG
+  空行とURLを除いて行数が10超、または空白・改行を除く文字数が300超、
+  または箇条書き・表の行が5行以上 → NG（リンクの有無で分けない＝2026-10-05 専務指示）
 使い方：python ~/.claude/scripts/precheck-answer.py <下書きファイル>
   OK なら exit 0、NG なら exit 1（行数・文字数と直し方を表示）
 """
@@ -34,47 +34,34 @@ def main():
         print("使い方：python ~/.claude/scripts/precheck-answer.py <下書きファイル>")
         return 2
     msg = Path(sys.argv[1]).read_text(encoding="utf-8")
-    line_limit, char_limit = limits()
-    lines = [l for l in msg.split("\n") if l.strip()]
-    chars = len("".join(msg.split()))
-    has_link = "127.0.0.1:8830" in msg or "127.0.0.1:8831/open" in msg
-    code = "```" in msg
-    print(f"行数 {len(lines)}/{line_limit}　文字数 {chars}/{char_limit}　リンク {'あり' if has_link else 'なし'}")
-    if code:
-        print("OK：このまま出してよい")
+    if "```" in msg:
+        print("長さ：チャットで出せる範囲（このあと言葉と中身の点検）")
         return 0
-    if has_link:
-        # リンクがあるときは本文を短く（html-gate.py と同じ基準・2026-09-23）
-        try:
-            spec = importlib.util.spec_from_file_location("html_gate", GATE)
-            m = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(m)
-            nl, nc = m.body_size(msg)
-            nd = 0   # 数字の見張りは 2026-09-30 専務決定（案A）で廃止
-            ll, lc = m.LINK_LINE_LIMIT, m.LINK_CHAR_LIMIT
-        except Exception:
-            nl, nc, nd, ll, lc = len(lines), chars, 0, 3, 120
-        print(f"（リンクあり）URLを除く本文 行数 {nl}/{ll}　文字数 {nc}/{lc}")
-        if nl <= ll and nc <= lc and nd == 0:
-            print("OK：このまま出してよい")
-            return 0
-        print("NG：レポートがあるのに本文が長い。結論1行・リンク1行・伺い1行だけにし、理由・直し方は書き写さない")
-        print("  ★チャットから外す数字・理由は、レポートの中に書いてあるかを確かめる。無ければレポートに足してから外す（黙って捨てない）")
-        return 1
-    try:                                                   # 箇条書き・表の一覧はレポート（html-gate.py と同じ基準・2026-09-24）
+    # ★2026-10-05 専務指示：リンクの有無で基準を分けない（関門 html-gate.py と同じ基準を読み込む）
+    #   空行とURLを除いて10行超 または 300字超／箇条書き・表の行が5行以上 → レポートにする
+    try:
         spec = importlib.util.spec_from_file_location("html_gate", GATE)
         m = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(m)
-        nb, lim = m.bullet_lines(msg), m.BULLET_LIMIT
+        nl, nc = m.body_size(msg)
+        nb, blim = m.bullet_lines(msg), m.BULLET_LIMIT
+        line_limit, char_limit = m.LIMIT, m.CHAR_LIMIT
     except Exception:
-        nb, lim = 0, 2
-    if nb >= lim:
+        lines = [l for l in msg.split("\n") if l.strip()]
+        nl, nc, nb, blim, line_limit, char_limit = len(lines), len("".join(msg.split())), 0, 5, 10, 300
+    has_link = "127.0.0.1:8830" in msg or "127.0.0.1:8831/open" in msg
+    print(f"URLを除く本文 行数 {nl}/{line_limit}　文字数 {nc}/{char_limit}　一覧 {nb}/{blim}行未満　リンク {'あり' if has_link else 'なし'}")
+    if nb >= blim:
         print(f"NG：箇条書き・表の一覧が {nb} 行ある。一覧はレポートにする（削って収めるのは禁止）：")
         print("  python ~/.claude/scripts/precheck-answer.py --report <下書き> <題名>")
         return 1
-    if len(lines) <= line_limit and chars <= char_limit:
-        print("OK：このまま出してよい")
+    if nl <= line_limit and nc <= char_limit:
+        print("長さ：チャットで出せる範囲（このあと言葉と中身の点検）")
         return 0
+    if has_link:
+        print("NG：レポートがあるのに本文が長い。中身はレポートに書き、チャットは結論・リンク・伺いにする")
+        print("  ★チャットから外す数字・理由は、レポートの中に書いてあるかを確かめる。無ければレポートに足してから外す（黙って捨てない）")
+        return 1
     print("NG：レポートにする（削って収めるのは禁止）。次で下書きをそのままレポートにする：")
     print("  python ~/.claude/scripts/precheck-answer.py --report <下書き> <題名>")
     return 1
@@ -240,6 +227,7 @@ PLAIN_PROMPT = """あなたは、製紙会社の専務に出す業務報告の�
 下の「下書き」を1文ずつ読み、専務が1回読んで意味が取れない文、またはオフィシャルな報告書として不適切な文だけを挙げてください。
 
 挙げる文：
+〔0〕専務のお尋ねに答え切っていない＝お尋ねの一部に答えていない、または専務が次に聞き直すことになる中身を残している（お尋ねが示されたときだけ見る。「物差し」は 0）
 〔1〕何を言いたいのかが伝わらない文
 〔2〕中身を言わずに言い回しだけで済ませた文＝何と何を比べるのか・誰が何をするのか・何を指すのかが、前後の文を読んでも分からない文
 〔3〕報告書として不適切な表現：書き手の作業日誌（何を読んだ・どのファイルを直した・プログラムを流した など）／書き手が独自に付けた呼び名／口語・くだけた言い方・感情的な言い方（「〜っぽい」「ざっくり」「とりあえず」「ちゃんと」「黙って」など）／プログラム名・ファイル名が文の主語
@@ -249,6 +237,8 @@ PLAIN_PROMPT = """あなたは、製紙会社の専務に出す業務報告の�
 - 「アプリは〜と答えます」「アプリがお尋ねします」のように、アプリや機械が主語の文は問題にしない（不適切なのはプログラムのファイル名が主語の文）
 - 前後の文や表の見出しを読めば中身が分かる文は挙げない
 - 迷う文は挙げない。はっきり伝わらない文だけを挙げる
+- 下に示す「社内で通じる言葉」は、専務がふだん使う言葉として扱い、独自の呼び名として挙げない
+- レポートへのリンク（[題名] の形）がある返答は、詳しい中身はリンク先のレポートにある前提で読む。結論と伺いが分かれば、中身を全部書けとは言わない。リンクの題名は見出しなので、文になっていなくても挙げない
 
 見本（専務が「分からない」と言った文＝挙げる）：
 - 「2で区切れないときは、品種ごとの合計のうち計にいちばん近い品種と比べ、その品種の行を聞く」（何と何を比べるのかが分からない）
@@ -263,6 +253,7 @@ PLAIN_PROMPT = """あなたは、製紙会社の専務に出す業務報告の�
 {{"問題": [{{"文": "下書きの文をそのまま", "物差し": "1|2|3", "理由": "なぜ伝わらないか（短く）"}}]}}
 問題が無ければ {{"問題": []}}
 
+{extra}
 下書き：
 {draft}
 """
@@ -270,17 +261,35 @@ PLAIN_PROMPT = """あなたは、製紙会社の専務に出す業務報告の�
 PLAIN_CACHE = Path.home() / ".claude" / "state" / "plain-check"
 
 
-def plain_issues(msg):
-    """分かる日本語の点検（2026-10-05 専務承認）。別の Claude に下書きを1文ずつ読ませ、伝わらない文を返す。
-    専務指示「この日本語が正しいな　これが claudemd に書かれているんだろ　また守れていない　これも強制的に守れるようにしておけ」
-    （「計にいちばん近い品種と比べ」「品種名に頼らない」「必ず書かせる」を報告に書いた）。
+COMPANY = Path(__file__).with_name("company_words.txt")
+LAST_PROMPT = Path.home() / ".claude" / "state" / "last_prompt.txt"
+
+
+def _lines_of(path):
+    try:
+        return [w.strip() for w in path.read_text(encoding="utf-8").splitlines()
+                if w.strip() and not w.lstrip().startswith("#")]
+    except Exception:
+        return []
+
+
+def plain_issues(msg, inventory="", check_answer=True):
+    """お尋ねに答え切っているか（〔0〕）と、分かる日本語か（〔1〕〜〔3〕）を、別の Claude に1回で点検させる。
+    2026-10-05 専務承認：この点検は最後にかける（中身・出し方が決まったあと）。社内で通じる言葉は不合格にしない。
+    別の AI に読ませるのは、書き手は前後の事情を知っているため自分の文を「分かる」と読んでしまうから。
     返り値＝(問題の一覧, 点検できなかった理由)。同じ下書きは控えから答える（点検に 20〜40 秒かかるため）"""
     import hashlib, json, re, shutil, subprocess
-    text = re.sub(r"\[([^\]]*)\]\((https?://[^)]*)\)", r"\1", msg)        # リンクは題名だけを読ませる
+    text = re.sub(r"\[([^\]]*)\]\((https?://[^)]*)\)", r"[\1]", msg)      # リンクは題名だけを読ませる
     text = re.sub(r"https?://\S+", "", text).strip()
     if not text:
         return [], ""
-    h = hashlib.sha256(text.encode("utf-8")).hexdigest()[:20]
+    extra = "社内で通じる言葉：" + "／".join(_lines_of(COMPANY)) + "\n"
+    q = LAST_PROMPT.read_text(encoding="utf-8").strip() if (check_answer and LAST_PROMPT.exists()) else ""
+    if q:
+        extra += "専務のお尋ね：" + q[:1500] + "\n"
+    if inventory:
+        extra += "書き手が決めた答えの中身（返答はこれを伝えているか）：\n" + inventory[:1500] + "\n"
+    h = hashlib.sha256((extra + text).encode("utf-8")).hexdigest()[:20]
     cache = PLAIN_CACHE / f"{h}.json"
     if cache.exists():
         try:
@@ -293,7 +302,8 @@ def plain_issues(msg):
     lean = ["--setting-sources", "", "--strict-mcp-config", "--no-chrome", "--disable-slash-commands",
             "--no-session-persistence", "--model", "opus", "--tools", ""]   # 設定・フックを読まずに1回だけ答えさせる
     try:
-        r = subprocess.run([exe, "-p", *lean, "--output-format", "json"], input=PLAIN_PROMPT.format(draft=text),
+        r = subprocess.run([exe, "-p", *lean, "--output-format", "json"],
+                           input=PLAIN_PROMPT.format(draft=text, extra=extra),
                            capture_output=True, text=True, encoding="utf-8", timeout=180)
         res = json.loads(r.stdout or "{}")
         if res.get("is_error"):
@@ -313,49 +323,76 @@ def plain_issues(msg):
     return issues, ""
 
 
-def stop_on_plain(path):
-    """伝わらない文が1つでもあれば NG（チャットにもレポートにも出させない）。点検できないときは知らせて通す"""
-    issues, why = plain_issues(Path(path).read_text(encoding="utf-8"))
+def stop_on_plain(msg, inventory="", check_answer=True):
+    """答え切っていない・伝わらない文が1つでもあれば NG。点検できないときは知らせて通す"""
+    issues, why = plain_issues(msg, inventory, check_answer)
     if why:
         print(f"注意：分かる日本語の点検ができませんでした（{why}）。出す前に、専務の立場で1文ずつ読み直すこと")
         return False
     if not issues:
         return False
-    print("NG：専務に伝わらない文がある。中身（何と何を・誰が何を・いくつ）を書いた文に書き直してから、もう一度測る：")
+    print("NG：お尋ねに答え切っていない、または専務に伝わらない文がある。")
+    print("    〔0〕は足りない中身を足す（足して基準を超えたらレポートにする）。〔1〕〜〔3〕は言い方だけ直す（中身は減らさない）：")
     for it in issues[:10]:
         print(f"  〔{it.get('物差し', '')}〕「{str(it.get('文', ''))[:70]}」")
         print(f"      → {it.get('理由', '')}")
     return True
 
 
+INV_RE = __import__("re").compile(r"<!--\s*中身(.*?)-->", __import__("re").S)
+
+
+def split_inventory(path):
+    """下書きから答えの中身の書き出し（<!-- 中身 … -->）を取り出し、(書き出し, 返答の本文) を返す。
+    2026-10-05 専務承認：中身を先に決めてから字数を測る順番を、書き出しの有無で機械に確かめさせる"""
+    raw = Path(path).read_text(encoding="utf-8")
+    m = INV_RE.search(raw)
+    if not m:
+        return None, raw
+    body = (raw[:m.start()] + raw[m.end():]).strip() + "\n"
+    return m.group(1).strip(), body
+
+
+def body_file(path, body):
+    """書き出しを除いた返答の本文を、隣のファイルに書いて返す（測る・指紋を残す・レポートにする対象）"""
+    out = Path(path).with_name(Path(path).stem + "_返答.md")
+    out.write_text(body, encoding="utf-8")
+    return str(out)
+
+
 if __name__ == "__main__":
-    if len(sys.argv) >= 3 and sys.argv[1] == "--report":
-        if stop_on_jargon(sys.argv[2]):   # レポートにする前に言い換える（呼び名のままレポートにしない）
-            sys.exit(1)
-        if stop_on_plain(sys.argv[2]):    # 伝わらない文のままレポートにしない（2026-10-05）
-            sys.exit(1)
-        sys.exit(to_report(sys.argv[2], sys.argv[3] if len(sys.argv) >= 4 else "回答"))
-    if len(sys.argv) >= 2 and stop_on_jargon(sys.argv[1]):   # 言い換えは削るのとは別＝NG の控えには残さない
+    # ★2026-10-05 専務承認：確認の順番＝①中身の書き出し → ②字数でチャットかレポートか → ③④別のAIが
+    #   「お尋ねに答え切っているか」「分かる日本語か」を1回で点検。9/28 の「削ったら止める」確認は外した
+    #   （中身を削っていないかは ①の書き出しと ③で確かめる）。
+    if len(sys.argv) < 2:
+        sys.exit(main())
+    rep = len(sys.argv) >= 3 and sys.argv[1] == "--report"
+    src = sys.argv[2] if rep else sys.argv[1]
+    inv, body = split_inventory(src)
+    if inv is None:                                       # ①
+        print("NG：下書きの先頭に、答えの中身の書き出しが無い。次の形で書いてから、もう一度測る（書き出しは返答に含めない）：")
+        print("  <!-- 中身\n  結論：\n  理由：\n  数字：\n  選択肢：\n  次の一手：\n  -->")
         sys.exit(1)
-    if len(sys.argv) >= 2 and stop_on_plain(sys.argv[1]):    # 書き直しも削るのとは別＝NG の控えには残さない（2026-10-05）
+    path = body_file(src, body)
+    if rep:
+        if stop_on_jargon(path) or stop_on_plain(body, inv, check_answer=False):
+            sys.exit(1)
+        sys.exit(to_report(path, sys.argv[3] if len(sys.argv) >= 4 else "回答"))
+    sys.argv[1] = path
+    rc = main()                                           # ②
+    if rc != 0:
+        sys.exit(rc)
+    if stop_on_jargon(path):
         sys.exit(1)
-    bad = dead_links(Path(sys.argv[1]).read_text(encoding="utf-8")) if len(sys.argv) >= 2 else []
-    if bad:   # 開けないリンクを開けるかのように出さない（削った・削らないとは別の話なので NG の控えには残さない）
+    bad = dead_links(body)
+    if bad:   # 開けないリンクを開けるかのように出さない
         print("NG：開けないリンクがある。リンク先を直して（合格印・置き場・配信）から出す：")
         for u, why in bad:
             print(f"  {u}")
             print(f"    → {why}")
         sys.exit(1)
-    rc = main()
-    if rc == 0 and len(sys.argv) >= 2:
-        ng = trimmed_from_ng(sys.argv[1])
-        if ng:
-            print(f"NG：直前に NG だった下書き（{ng}）を削って通そうとしている。削って収めるのは禁止＝レポートにする：")
-            print("  python ~/.claude/scripts/precheck-answer.py --report <下書き> <題名>")
-            print("  ★削ったのが本当に不要な重複だけなら、NG だった元の下書きをそのままレポートにする")
-            rc = 1
-        else:
-            record_ok(sys.argv[1])
-    elif rc == 1 and len(sys.argv) >= 2:
-        record_ng(sys.argv[1])
-    sys.exit(rc)
+    if stop_on_plain(body, inv):                          # ③④
+        sys.exit(1)
+    record_ok(path)
+    print("合格：返答として出すのは、書き出しを除いた本文（" + path + "）を一字も変えずに")
+    sys.exit(0)

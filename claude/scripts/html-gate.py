@@ -28,8 +28,9 @@ CHAR_LIMIT = int(os.environ.get("HTML_GATE_CHAR_LIMIT", "300"))
 #   行数5・文字数250まで（＝結論1行＋リンク＋判断を仰ぐこと1〜3行）。
 # ★2026-09-24 強化（専務指示）：5行・250字では結論行・伺い行にレポートの数字や直し方を書き写しても通っていた。
 #   リンクがある回答は 結論1行・リンク1行・伺い1行＝URLを除き 行数3・文字数120 まで。
-LINK_LINE_LIMIT = int(os.environ.get("HTML_GATE_LINK_LIMIT", "3"))
-LINK_CHAR_LIMIT = int(os.environ.get("HTML_GATE_LINK_CHAR_LIMIT", "120"))
+# ★2026-10-05 専務指示で廃止：リンク付きも同じ基準（URLを除き10行・300字）。参照する所のために値だけ残す
+LINK_LINE_LIMIT = LIMIT
+LINK_CHAR_LIMIT = CHAR_LIMIT
 
 
 def body_size(msg):
@@ -61,7 +62,8 @@ def prechecked(msg):
         return False
 
 
-BULLET_LIMIT = int(os.environ.get("HTML_GATE_BULLET_LIMIT", "2"))
+# ★2026-10-05 専務指示：2行以上 → 5行以上
+BULLET_LIMIT = int(os.environ.get("HTML_GATE_BULLET_LIMIT", "5"))
 BULLET_RE = re.compile(r"^\s*(?:[・\-\*•●○▶]\s*|\d{1,2}[\.\)．）]\s*|〔\d{1,2}〕|[①-⑳]|[(（]\d{1,2}[)）])")
 
 
@@ -194,58 +196,27 @@ def main():
         out("skip")
     if "```" in msg:              # コード提示は対象外
         out("skip")
-    # ★2026-09-24 追加（専務指示「表示する前に数えろ」）：長くならないと思い込むと数えずに出していた。
-    #   4行を超える回答は、precheck-answer.py で数えて OK になった下書きと同じ文でなければ止める。
-    # ★2026-09-26 追加：リンク付きの返答は3行なので数えずに出せてしまい、字数・名前の中の数字（「9月」「5x」）で
-    #   落ち続けた。リンク付きの返答も、行数によらず数えた下書きと同じ文でなければ違反にする。
-    if not has_link(msg) and len([l for l in msg.split("\n") if l.strip()]) > PRECHECK_MIN_LINES and not prechecked(msg):
-        if not any(kw in lu for kw in SKIP_WORDS):
-            key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
-            sys.stdout.write("block\t" + key + "\tP\n")
-            sys.exit(0)
-    if has_link(msg):   # レポート（8830）・エクセル（8831）のリンクあり＝本文は短く（2026-09-23）
-        nl, nc = body_size(msg)
-        # ★2026-09-24 追加（専務指示「機械で強制的に守れるようにしろ」）：3行・120字に収まっていても、
-        #   結論や伺いの行にレポートの数字を書き写していた。リンクの行以外に数字があれば止める。
-        nd = 0   # 数字の見張りは 2026-09-30 専務決定（案A）で廃止。digit_lines は残すが使わない
-        if nl <= LINK_LINE_LIMIT and nc <= LINK_CHAR_LIMIT and nd == 0:
-            if prechecked(msg) or any(kw in lu for kw in SKIP_WORDS):
-                out("skip")
-            key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
-            sys.stdout.write("block\t" + key + "\tP\n")     # 基準は守れているが数えずに出した（2026-09-26）
-            sys.exit(0)
-        for kw in SKIP_WORDS:
-            if kw in lu:
-                out("skip")
-        key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
-        # 3列目の先頭 L ＝「リンクはあるが本文が長い」
-        why = str(nl) if nl > LINK_LINE_LIMIT else (str(nc) + "c" if nc > LINK_CHAR_LIMIT else str(nd) + "d")
-        sys.stdout.write("block\t" + key + "\tL" + why + "\n")
+    key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
+    if any(kw in lu for kw in SKIP_WORDS):
+        out("skip")
+    # ★2026-10-05 専務指示：リンクの有無で基準を分けない。
+    #   旧＝リンク付きの返答だけ「URLを除き3行・120字」。120字では中身が書けず、分かる日本語の点検に落ち続けた
+    #   （リンクの無いチャットの方が通りやすく、レポートを避ける方向に流れた）。
+    #   新＝どの返答も「空行とURLを除いて10行超 または 300字超」「箇条書き・表の行が5行以上」ならレポートにする。
+    # 行数によらず、precheck-answer.py で OK になった下書きと同じ文でなければ違反（2026-09-24／10-04）
+    if len([l for l in msg.split("\n") if l.strip()]) > PRECHECK_MIN_LINES and not prechecked(msg):
+        sys.stdout.write("block\t" + key + "\tP\n")
         sys.exit(0)
-
-    lines = [l for l in msg.split("\n") if l.strip()]
-    chars = len("".join(msg.split()))          # 空白・改行を除いた文字数
-    # ★2026-09-24 追加（専務指示）：短くても箇条書きの一覧（手順・案の列挙）はレポートにする。
-    #   行数・文字数だけを見ていたため、3項目の箇条書きがチャットに出ていた。
     nb = bullet_lines(msg)
-    if nb >= BULLET_LIMIT and not any(kw in lu for kw in SKIP_WORDS):
-        key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
+    if nb >= BULLET_LIMIT:
         sys.stdout.write("block\t" + key + "\tB" + str(nb) + "\n")
         sys.exit(0)
-    if len(lines) <= LIMIT and chars <= CHAR_LIMIT:
+    nl, nc = body_size(msg)
+    if nl <= LIMIT and nc <= CHAR_LIMIT:
         out("skip")
-
-    for kw in SKIP_WORDS:
-        if kw in lu:
-            out("skip")
-
-    # ★2026-09-02 修正（欠陥C）：キーに行数を入れると、行数が変わるたびに
-    #   カウンタが別物になり「同一プロンプトで何回ブロックしたか」が積み上がらない。
-    #   プロンプト単位で数えるため行数はキーから外し、行数は3列目で渡す。
-    key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
-    # 3列目＝鳴った理由。行数超過なら行数、文字数超過なら「Nc」（cはcharsの意）
-    size = str(len(lines)) if len(lines) > LIMIT else str(chars) + "c"
-    sys.stdout.write("block\t" + key + "\t" + size + "\n")
+    # 3列目＝鳴った理由。行数超過なら行数、文字数超過なら「Nc」。リンク付きなら先頭に L
+    size = str(nl) if nl > LIMIT else str(nc) + "c"
+    sys.stdout.write("block\t" + key + "\t" + ("L" if has_link(msg) else "") + size + "\n")
     sys.exit(0)
 
 

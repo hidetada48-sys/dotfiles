@@ -62,7 +62,7 @@ fi
 
 # --- pythonが無い＝判定不能。止めずに記録し、次の指示で Claude に伝える（2026-09-26）---
 if [ -z "$PY" ]; then
-    printf '%s\t%s\t\n' "$(date '+%Y-%m-%d %H:%M')" "関門が判定できない（動く python が無い）＝返答は自分で3行・120字・数字なしを守る" >> "$STATE_DIR/html-gate_pending.log" 2>/dev/null
+    printf '%s\t%s\t\n' "$(date '+%Y-%m-%d %H:%M')" "関門が判定できない（動く python が無い）＝返答は自分でURLを除き10行・300字・一覧5行未満を守る" >> "$STATE_DIR/html-gate_pending.log" 2>/dev/null
     exit 0
 fi
 rm -f "$STATE_DIR/html-gate_nopython.count" 2>/dev/null
@@ -84,9 +84,8 @@ case "$NLINES" in
   P*) WHY="数えずに出した（precheck-answer.py で OK になった下書きと同じ文ではない）" ;;
   L*) R="${NLINES#L}"
       case "$R" in
-        *c) WHY="リンク付きなのに本文が${R%c}字（上限120字）" ;;
-        *d) WHY="リンク付きなのにリンクの行以外に数字がある行が${R%d}（名前の中の数字も不可）" ;;
-        *)  WHY="リンク付きなのに本文が${R}行（上限3行）" ;;
+        *c) WHY="リンク付きなのに本文が${R%c}字（上限300字）。中身はレポートに書く" ;;
+        *)  WHY="リンク付きなのに本文が${R}行（上限10行）。中身はレポートに書く" ;;
       esac ;;
   *)  WHY="長い返答（${NLINES}）をレポートにせずチャットに書いた" ;;
 esac
