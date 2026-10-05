@@ -235,12 +235,109 @@ def stop_on_jargon(path):
     return True
 
 
+PLAIN_PROMPT = """あなたは、製紙会社の専務に出す業務報告の文章を点検する係です。
+読む人は専務（工場の業務と、社内で使っている帳票・日報アプリの画面を知っている経営者）です。
+下の「下書き」を1文ずつ読み、専務が1回読んで意味が取れない文、またはオフィシャルな報告書として不適切な文だけを挙げてください。
+
+挙げる文：
+〔1〕何を言いたいのかが伝わらない文
+〔2〕中身を言わずに言い回しだけで済ませた文＝何と何を比べるのか・誰が何をするのか・何を指すのかが、前後の文を読んでも分からない文
+〔3〕報告書として不適切な表現：書き手の作業日誌（何を読んだ・どのファイルを直した・プログラムを流した など）／書き手が独自に付けた呼び名／口語・くだけた言い方・感情的な言い方（「〜っぽい」「ざっくり」「とりあえず」「ちゃんと」「黙って」など）／プログラム名・ファイル名が文の主語
+
+挙げない文：
+- 業務の物の名前（製品名 100S・130S、帳票名、日報アプリ、確認画面、切り抜き、品種名、一覧エクセル など）、人や会社の名前、数字は、そのままで分かる言葉として扱う
+- 「アプリは〜と答えます」「アプリがお尋ねします」のように、アプリや機械が主語の文は問題にしない（不適切なのはプログラムのファイル名が主語の文）
+- 前後の文や表の見出しを読めば中身が分かる文は挙げない
+- 迷う文は挙げない。はっきり伝わらない文だけを挙げる
+
+見本（専務が「分からない」と言った文＝挙げる）：
+- 「2で区切れないときは、品種ごとの合計のうち計にいちばん近い品種と比べ、その品種の行を聞く」（何と何を比べるのかが分からない）
+- 「品種名に頼らない」（何をするのかが分からない）
+- 「質問への Gemini の答えでも、品種名が他と違う行があれば必ず書かせる」（誰に何を書かせるのかが分からない）
+- 「品種が2つなのに計が1つなので、85,000m を勤全体の計と判断した」（なぜそうなるのかの筋が通らない）
+見本（専務が「この日本語が正しい」と言った文＝挙げない）：
+- 「確認画面で専務がアプリに質問したとき、品種名がほかの行と違う行があれば、アプリは『1本目だけ角130Sと読んでいます』のように、その行を名指しして答える」
+- 「これまで確定した日報に無い品種名を読んだときは、確認画面にその行の紙の切り抜きを出し、『初めて出てきた品種名です。紙に書かれた品種名を入れてください』とお尋ねする」
+
+答えは次の JSON だけを返してください（説明の文は付けない）：
+{{"問題": [{{"文": "下書きの文をそのまま", "物差し": "1|2|3", "理由": "なぜ伝わらないか（短く）"}}]}}
+問題が無ければ {{"問題": []}}
+
+下書き：
+{draft}
+"""
+
+PLAIN_CACHE = Path.home() / ".claude" / "state" / "plain-check"
+
+
+def plain_issues(msg):
+    """分かる日本語の点検（2026-10-05 専務承認）。別の Claude に下書きを1文ずつ読ませ、伝わらない文を返す。
+    専務指示「この日本語が正しいな　これが claudemd に書かれているんだろ　また守れていない　これも強制的に守れるようにしておけ」
+    （「計にいちばん近い品種と比べ」「品種名に頼らない」「必ず書かせる」を報告に書いた）。
+    返り値＝(問題の一覧, 点検できなかった理由)。同じ下書きは控えから答える（点検に 20〜40 秒かかるため）"""
+    import hashlib, json, re, shutil, subprocess
+    text = re.sub(r"\[([^\]]*)\]\((https?://[^)]*)\)", r"\1", msg)        # リンクは題名だけを読ませる
+    text = re.sub(r"https?://\S+", "", text).strip()
+    if not text:
+        return [], ""
+    h = hashlib.sha256(text.encode("utf-8")).hexdigest()[:20]
+    cache = PLAIN_CACHE / f"{h}.json"
+    if cache.exists():
+        try:
+            return json.loads(cache.read_text(encoding="utf-8")), ""
+        except Exception:
+            pass
+    exe = shutil.which("claude")
+    if not exe:
+        return [], "claude が見つからない"
+    lean = ["--setting-sources", "", "--strict-mcp-config", "--no-chrome", "--disable-slash-commands",
+            "--no-session-persistence", "--model", "opus", "--tools", ""]   # 設定・フックを読まずに1回だけ答えさせる
+    try:
+        r = subprocess.run([exe, "-p", *lean, "--output-format", "json"], input=PLAIN_PROMPT.format(draft=text),
+                           capture_output=True, text=True, encoding="utf-8", timeout=180)
+        res = json.loads(r.stdout or "{}")
+        if res.get("is_error"):
+            return [], str(res.get("result") or "")[:120]
+        body = str(res.get("result") or "")
+        m = re.search(r"\{.*\}", body, re.S)
+        issues = json.loads(m.group(0)).get("問題", []) if m else None
+        if issues is None:
+            return [], "点検の答えが読めない"
+    except Exception as ex:
+        return [], f"{type(ex).__name__}: {ex}"[:120]
+    try:
+        PLAIN_CACHE.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps(issues, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+    return issues, ""
+
+
+def stop_on_plain(path):
+    """伝わらない文が1つでもあれば NG（チャットにもレポートにも出させない）。点検できないときは知らせて通す"""
+    issues, why = plain_issues(Path(path).read_text(encoding="utf-8"))
+    if why:
+        print(f"注意：分かる日本語の点検ができませんでした（{why}）。出す前に、専務の立場で1文ずつ読み直すこと")
+        return False
+    if not issues:
+        return False
+    print("NG：専務に伝わらない文がある。中身（何と何を・誰が何を・いくつ）を書いた文に書き直してから、もう一度測る：")
+    for it in issues[:10]:
+        print(f"  〔{it.get('物差し', '')}〕「{str(it.get('文', ''))[:70]}」")
+        print(f"      → {it.get('理由', '')}")
+    return True
+
+
 if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "--report":
         if stop_on_jargon(sys.argv[2]):   # レポートにする前に言い換える（呼び名のままレポートにしない）
             sys.exit(1)
+        if stop_on_plain(sys.argv[2]):    # 伝わらない文のままレポートにしない（2026-10-05）
+            sys.exit(1)
         sys.exit(to_report(sys.argv[2], sys.argv[3] if len(sys.argv) >= 4 else "回答"))
     if len(sys.argv) >= 2 and stop_on_jargon(sys.argv[1]):   # 言い換えは削るのとは別＝NG の控えには残さない
+        sys.exit(1)
+    if len(sys.argv) >= 2 and stop_on_plain(sys.argv[1]):    # 書き直しも削るのとは別＝NG の控えには残さない（2026-10-05）
         sys.exit(1)
     bad = dead_links(Path(sys.argv[1]).read_text(encoding="utf-8")) if len(sys.argv) >= 2 else []
     if bad:   # 開けないリンクを開けるかのように出さない（削った・削らないとは別の話なので NG の控えには残さない）
