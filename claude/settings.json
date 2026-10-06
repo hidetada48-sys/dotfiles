@@ -183,7 +183,8 @@
     "claude-mem@thedotmack": false,
     "fakechat@claude-plugins-official": false,
     "discord@claude-plugins-official": true,
-    "claude-code-setup@claude-plugins-official": true
+    "claude-code-setup@claude-plugins-official": true,
+    "cc-plugin-you-should-know@builtin": true
   },
   "extraKnownMarketplaces": {
     "thedotmack": {
