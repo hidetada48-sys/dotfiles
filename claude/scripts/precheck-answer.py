@@ -190,6 +190,36 @@ def to_report(path, title):
     return 0
 
 
+PROSE_MAX = 60   # レポートの地の文の1行の上限（字）
+
+
+def prose_lines(body):
+    """レポートにする下書きのうち、段落になっている行を (行番号, 行) で返す。
+    見出し・箇条書き・番号・表・引用・リンクだけの行は対象外。60字を超えるか「。」が2つ以上なら段落とみなす。
+    専務指示 2026-10-08「レポートでもだらだら書くな。箇条書きを使ってわかりやすく書け」"""
+    import re
+    out = []
+    for n, l in enumerate(body.splitlines(), 1):
+        t = l.strip()
+        if not t or re.match(r"^(#|[-*+]\s|\d+[.)．]\s?|[〔(（]?\d+[〕)）]|\||>|---|<!--)", t):
+            continue
+        plain = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", t)        # リンクは見出しの文字だけ数える
+        if len(plain) > PROSE_MAX or plain.count("。") >= 2:
+            out.append((n, t))
+    return out
+
+
+def stop_on_prose(body):
+    bad = prose_lines(body)
+    if not bad:
+        return False
+    print("NG：レポートに段落がある。見出し（結論・原因・直し方・結果など）＋1項目1行の箇条書きに組み直してから、もう一度 --report する")
+    print(f"    （見出し・箇条書き・番号・表以外の行で {PROSE_MAX}字超 か「。」が2つ以上。中身は削らず形だけ変える）")
+    for n, t in bad[:8]:
+        print(f"  {n}行目：{t[:50]}…")
+    return True
+
+
 JARGON = Path(__file__).with_name("jargon_words.txt")
 
 
@@ -375,7 +405,7 @@ if __name__ == "__main__":
         sys.exit(1)
     path = body_file(src, body)
     if rep:
-        if stop_on_jargon(path) or stop_on_plain(body, inv, check_answer=False):
+        if stop_on_prose(body) or stop_on_jargon(path) or stop_on_plain(body, inv, check_answer=False):
             sys.exit(1)
         sys.exit(to_report(path, sys.argv[3] if len(sys.argv) >= 4 else "回答"))
     sys.argv[1] = path
