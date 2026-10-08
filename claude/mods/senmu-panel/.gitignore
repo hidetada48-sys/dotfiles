@@ -1,0 +1,3 @@
+# 起動のたびに Claude Code が自動で置く型の説明と設定（保存しない）
+.claude-plugin/types/
+tsconfig.json

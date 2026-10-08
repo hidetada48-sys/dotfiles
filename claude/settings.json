@@ -2,7 +2,8 @@
   "env": {
     "MCP_TIMEOUT": "60000",
     "MCP_TOOL_TIMEOUT": "30000",
-    "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION": "true"
+    "CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION": "true",
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/dotfiles/claude/mods/senmu-panel"
   },
   "permissions": {
     "deny": [

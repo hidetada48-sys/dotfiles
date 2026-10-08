@@ -1,0 +1,1 @@
+{ "name": "senmu-panel", "version": "0.1.0", "description": "専務の操作盤：返事ボタン・最新の取り込み・依頼ボタン・未決事項・横で質問・控え帳", "types": "./types/index.d.ts" }
