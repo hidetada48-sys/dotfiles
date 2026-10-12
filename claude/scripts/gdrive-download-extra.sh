@@ -35,6 +35,22 @@ if [ -d "$SALES_PROJECT" ]; then
   # 機密ファイル（社員台帳・有給付与一覧など）
   mkdir -p "$SALES_PROJECT/secrets/hr"
   rclone copy $RFLAGS --update "$GDRIVE_FOLDER/secrets-hr/" "$SALES_PROJECT/secrets/hr/" 2>> "$LOG_FILE"
+
+  # 回答のレポート（もう一方のPCで作った答え）。2026-10-13 専務叱責で2台にそろえる
+  mkdir -p "$SALES_PROJECT/private/answers"
+  rclone copy $RFLAGS --update --include "*.md" "$GDRIVE_FOLDER/private-answers/" "$SALES_PROJECT/private/answers/" 2>> "$LOG_FILE"
+  # 届いた答えのうち HTML が無い物だけ HTML にする（リンクで開けるように）
+  PY=python3; command -v python3 >/dev/null 2>&1 && python3 -c "" 2>/dev/null || PY=python
+  NEW=()
+  for f in "$SALES_PROJECT"/private/answers/*.md; do
+    [ -e "$f" ] || continue
+    b=$(basename "$f" .md)
+    [ -f "$SALES_PROJECT/.reports_html/private/answers/$b.html" ] || NEW+=("private/answers/$b.md")
+  done
+  if [ ${#NEW[@]} -gt 0 ] && command -v "$PY" >/dev/null 2>&1; then
+    (cd "$SALES_PROJECT" && "$PY" tools/report_html.py "${NEW[@]}" >> "$LOG_FILE" 2>&1)
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 回答のレポート ${#NEW[@]}本を HTML にしました" >> "$LOG_FILE"
+  fi
 fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] 業務データのダウンロード完了(背景)" >> "$LOG_FILE"

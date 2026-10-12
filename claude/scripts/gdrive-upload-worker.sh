@@ -83,6 +83,11 @@ fi
 [ -d "$HOME/mino-sakura-hq/secrets/hr" ] && \
   run_rclone "secrets/hr（機密）" copy $RFLAGS --update "$HOME/mino-sakura-hq/secrets/hr/" "$GDRIVE_FOLDER/secrets-hr/"
 
+# --- ⑤ 回答のレポート（private/answers・GitHub に上げないフォルダ） ---
+# 2026-10-13 専務叱責：専務PCで作った答えが夜の Linux に無く、Linux の答えも専務PCに無かった。
+# GitHub には上げず、ドライブ経由で2台にそろえる（原本の md だけ。HTML は各PCで作る）
+[ -d "$HOME/mino-sakura-hq/private/answers" ] &&   run_rclone "回答のレポート" copy $RFLAGS --update --include "*.md" "$HOME/mino-sakura-hq/private/answers/" "$GDRIVE_FOLDER/private-answers/"
+
 if [ "$UPLOAD_NG" -eq 0 ]; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] アップロード完了(背景) 全て成功" >> "$LOG_FILE"
 else

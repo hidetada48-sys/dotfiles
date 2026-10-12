@@ -53,7 +53,7 @@ def main():
     print(f"URLを除く本文 行数 {nl}/{line_limit}　文字数 {nc}/{char_limit}　一覧 {nb}/{blim}行未満　リンク {'あり' if has_link else 'なし'}")
     if nb >= blim:
         print(f"NG：箇条書き・表の一覧が {nb} 行ある。一覧はレポートにする（削って収めるのは禁止）：")
-        print("  python ~/.claude/scripts/precheck-answer.py --report <下書き> <題名>")
+        print("  python ~/.claude/scripts/precheck-answer.py --report <下書き> <題名> <置き場＝業務は参謀名／仕組み／会話>")
         return 1
     if nl <= line_limit and nc <= char_limit:
         print("長さ：チャットで出せる範囲（このあと言葉と中身の点検）")
@@ -63,7 +63,7 @@ def main():
         print("  ★チャットから外す数字・理由は、レポートの中に書いてあるかを確かめる。無ければレポートに足してから外す（黙って捨てない）")
         return 1
     print("NG：レポートにする（削って収めるのは禁止）。次で下書きをそのままレポートにする：")
-    print("  python ~/.claude/scripts/precheck-answer.py --report <下書き> <題名>")
+    print("  python ~/.claude/scripts/precheck-answer.py --report <下書き> <題名> <置き場＝業務は参謀名／仕組み／会話>")
     return 1
 
 
@@ -155,24 +155,66 @@ def trimmed_from_ng(path):
     return None
 
 
-def to_report(path, title):
+# ★2026-10-13 専務叱責「本業に支障をきたさないようルールを徹底しろ」：
+#   10/12 にふるさと納税の分析（業務）を回答のフォルダ（private/answers＝GitHub に上げない）に置き、
+#   夜に Linux で続きを始めたとき中身が無かった。置き場を毎回必ず指定させ、業務は参謀の分析フォルダ、
+#   仕組みの話は設計書のフォルダ（どちらも GitHub で2台に届く）へ置く。回答のフォルダは「その場限りの会話」だけ。
+PLACES = {
+    "経営": "executive-advisor/analysis",
+    "業界": "intelligence/reports",
+    "取引先": "clients/analysis",
+    "販売": "sales/analysis",
+    "現場": "production/analysis",
+    "経理": "finance/analysis",
+    "労務": "hr/analysis",
+    "仕組み": "docs/plans",
+    "会話": "private/answers",
+}
+PLACE_HELP = """置き場を必ず指定する（4つ目の引数）。迷ったら「業務か」で決める：
+  業務（会社の数字・分析・判断材料・取引先・生産・在庫・ふるさと納税など。専務が後で読み返す・決める物）
+    → 経営／業界／取引先／販売／現場／経理／労務（その参謀の分析フォルダ。GitHub で2台に届く・目次に載る）
+  仕組み（参謀システム・アプリ・決まり・道具の説明や直し方）→ 仕組み（設計書のフォルダ。GitHub で2台に届く）
+  会話（お詫び・その場限りの説明で、二度と読み返さない物）→ 会話（回答のフォルダ。ドライブ経由で2台にそろう）
+  例：python ~/.claude/scripts/precheck-answer.py --report <下書き> <題名> 販売"""
+
+
+def to_report(path, title, place=None):
     """下書きをそのままレポート（HTML）にして、チャットに出す3行の型を表示する。
-    削らずに済むよう、レポートにする手間をゼロにする（2026-09-28）"""
+    削らずに済むよう、レポートにする手間をゼロにする（2026-09-28）。置き場は必ず指定させる（2026-10-13）"""
     import datetime
     import re
     import subprocess
+    if place not in PLACES:
+        print("NG：レポートの置き場が指定されていない（または一覧に無い）。" + ("指定＝" + place if place else ""))
+        print(PLACE_HELP)
+        return 1
+    body = Path(path).read_text(encoding="utf-8")
+    if place == "会話" and re.search(r"(?<![A-Za-z])(SAL|PRD|CLI|FIN|HR|EXE|INT)-\d{3}(?!\d)", body):
+        print("NG：案件番号（SAL-004 など）がある＝業務の中身。会話のフォルダには置かない。参謀の分析フォルダを指定する")
+        print(PLACE_HELP)
+        return 1
     here = Path.cwd()
     repo = next((d for d in [here, *here.parents] if (d / "tools/report_html.py").exists()),
                 Path.home() / "mino-sakura-hq")
     safe = re.sub(r'[\\/:*?"<>|\s]+', "_", title).strip("_") or "回答"
-    # ★2026-10-04 専務「このリンクが開けません」：題名をそのままファイル名にするとURLが長くなり、
-    #   ターミナルで折り返されてクリックしても開けない。ファイル名の題名部分は12字までにする（見出しは題名のまま）
-    safe = safe[:12].rstrip("_・")
-    rel = f"private/answers/{datetime.datetime.now():%Y-%m-%d_%H%M}_{safe}.md"
+    now = datetime.datetime.now()
+    if place == "会話":
+        # ★2026-10-04 専務「このリンクが開けません」：題名をそのままファイル名にするとURLが長くなり、
+        #   ターミナルで折り返されてクリックしても開けない。ファイル名の題名部分は12字までにする（見出しは題名のまま）
+        safe = safe[:12].rstrip("_・")
+        rel = f"private/answers/{now:%Y-%m-%d_%H%M}_{safe}.md"
+    elif place == "仕組み":
+        safe = safe[:24].rstrip("_・")
+        rel = f"docs/plans/{now:%Y-%m-%d}-{safe}.md"
+    else:
+        safe = safe[:24].rstrip("_・")
+        rel = f"{PLACES[place]}/{now:%Y-%m-%d}_{safe}.md"
     out = repo / rel
+    if out.exists():   # 同じ日に同じ題名がある＝上書きしない（見せたレポートを消さない）
+        rel = rel[:-3] + f"_{now:%H%M}.md"
+        out = repo / rel
     out.parent.mkdir(parents=True, exist_ok=True)
-    body = Path(path).read_text(encoding="utf-8")
-    head = "" if body.lstrip().startswith("# ") else "# " + title + "\n\n"
+    head ="" if body.lstrip().startswith("# ") else "# " + title + "\n\n"
     out.write_text(head + body, encoding="utf-8")
     py = "python" if sys.platform == "win32" else "python3"
     r = subprocess.run([py, "tools/report_html.py", rel], cwd=repo, capture_output=True, text=True,
@@ -187,6 +229,11 @@ def to_report(path, title):
     print("  1行目：結論")
     print(f"  2行目：[{safe}]({url})")   # 見出しも短く＝見出しとURLが1行に並んで折り返されないように（2026-10-04）
     print("  3行目：伺い")
+    if place != "会話":
+        # 2台に届くのはコミット・プッシュしてから。業務は案件台帳の詳細レポート列にも足す
+        print("★このレポートは作ったその場でコミット・プッシュする（しないと、もう一方のPCに届かない）")
+        if place not in ("仕組み", "業界"):
+            print("★案件のある業務なら、その参謀の案件台帳の「詳細レポート」列にこのパスを足す：" + rel)
     return 0
 
 
@@ -405,9 +452,15 @@ if __name__ == "__main__":
         sys.exit(1)
     path = body_file(src, body)
     if rep:
+        # 置き場の指定は、文章の点検（時間がかかる）より先に確かめる（2026-10-13）
+        if (sys.argv[4] if len(sys.argv) >= 5 else None) not in PLACES:
+            print("NG：レポートの置き場が指定されていない（または一覧に無い）。")
+            print(PLACE_HELP)
+            sys.exit(1)
         if stop_on_prose(body) or stop_on_jargon(path) or stop_on_plain(body, inv, check_answer=False):
             sys.exit(1)
-        sys.exit(to_report(path, sys.argv[3] if len(sys.argv) >= 4 else "回答"))
+        sys.exit(to_report(path, sys.argv[3] if len(sys.argv) >= 4 else "回答",
+                           sys.argv[4] if len(sys.argv) >= 5 else None))
     sys.argv[1] = path
     rc = main()                                           # ②
     if rc != 0:
