@@ -22,7 +22,6 @@ const isSideBusy = atom({ plugin: 'senmu-panel', key: 'isSideBusy' } as const, f
 
 // PCをまたいで残す値の置き場（そのPCの中）
 const STORE_PENDING = 'pending'
-const STORE_VIOLATIONS_SEEN = 'violationsSeen'
 
 // 伺いで終わった返答かどうか（最後の行の終わり方で見る）
 const ASK_END = /(でしょうか|ませんか|ますか|しますか|ください|か)[。？?！!）)]*$/
@@ -98,24 +97,8 @@ async function addNote($: Dollar, source: 'senmu' | 'auto', text: string, at?: s
   await saveNotes($, list)
 }
 
-// 返答の決まり違反の記録（html-gate_violations.log）から、新しい分を控え帳に自動で載せる
-async function importViolations($: Dollar): Promise<void> {
-  const path = `${await home($)}/.claude/state/html-gate_violations.log`
-  if (!(await $.fs.exists(path))) return
-  const lines = (await $.fs.read(path)).split('\n').filter(l => l.trim() !== '')
-  const seen = (await $.store.get(STORE_VIOLATIONS_SEEN)) as number | undefined
-  // 初めて動いたときは、これまでの分は載せずに数だけ覚える
-  if (seen === undefined || seen > lines.length) {
-    await $.store.set(STORE_VIOLATIONS_SEEN, lines.length)
-    return
-  }
-  for (const line of lines.slice(seen)) {
-    const [at, reason, excerpt] = line.split('\t')
-    const head = (excerpt ?? '').slice(0, 40)
-    await addNote($, 'auto', `返答の決まり違反：${reason ?? ''}${head ? `（返答の書き出し「${head}」）` : ''}`, at)
-  }
-  await $.store.set(STORE_VIOLATIONS_SEEN, lines.length)
-}
+// ※控え帳は専務が書き留める物（2026-10-08 決定）。私の決まり違反は別の記録（html-gate_violations.log）に残るので、
+//   控え帳へは写さない（2026-10-12 専務承認で写す機能を外した）
 
 // 未決事項を、画面とそのPCの保存場所の両方に書く
 // 未決事項のファイル（そのPCの中）。決まった伺いは私がこのファイルから外す
@@ -230,7 +213,6 @@ export const register: Register = on => {
     await update($, isPullAsked, () => true)
     await update($, isPullOffered, () => isFirst)
     try {
-      await importViolations($)
       const list = await loadNotes($)
       await update($, notes, () => list)
     } catch {
@@ -245,14 +227,9 @@ export const register: Register = on => {
     return { text: '専務の操作盤を開きました。' }
   })
 
-  // 専務が何か送ったら、〔最新を取り込む〕は下げる。決まり違反の新しい記録も控え帳に載せる
+  // 専務が何か送ったら、〔最新を取り込む〕は下げる
   on('prompt.submit', async ($, e, next) => {
     if ((await read($, pullStatus)) !== '取り込み中…') await update($, isPullOffered, () => false)
-    try {
-      await importViolations($)
-    } catch {
-      // 読めなくても依頼は止めない
-    }
     return next(e)
   }).catch(($, e, next) => next(e)) // 失敗しても専務の依頼は必ず通す
 
