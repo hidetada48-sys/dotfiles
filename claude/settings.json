@@ -83,6 +83,15 @@
             "command": "bash ~/.claude/hooks/run-python.sh ~/.claude/hooks/report-answer-lock.py"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/run-python.sh ~/.claude/hooks/brainstorm-gate.py"
+          }
+        ]
       }
     ],
     "SessionStart": [
