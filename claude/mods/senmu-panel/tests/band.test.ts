@@ -3,6 +3,9 @@ import { expect, mock, test } from 'claude-code/testing'
 
 const PANE = { plugin: 'senmu-panel', component: 'Pane', requestId: 'senmu-panel' } as const
 
+// 試験の中の置き場の名前をそろえる（Windows は「/h/…」を「C:\h\…」に書き換えるため、どちらも「/h/…」として扱う）
+const key = (p: string) => p.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '')
+
 test('伺いで終わると未決事項に載る', async ($, on) => {
   mock.clock(on)
   mock.store(on)
@@ -10,10 +13,10 @@ test('伺いで終わると未決事項に載る', async ($, on) => {
   // ファイルの読み書きは、試験の中だけの入れ物で代わりに受ける
   mock.env(on, { HOME: '/h' })
   const files = new Map<string, string>()
-  on('fs.exists', ($, e) => ({ value: files.has(e.path) }))
-  on('fs.read', ($, e) => ({ value: files.get(e.path) ?? '' }))
+  on('fs.exists', ($, e) => ({ value: files.has(key(e.path)) }))
+  on('fs.read', ($, e) => ({ value: files.get(key(e.path)) ?? '' }))
   on('fs.write', ($, e) => {
-    files.set(e.path, e.text)
+    files.set(key(e.path), e.text)
     return { value: undefined }
   })
   await $.turn.complete({
@@ -43,10 +46,10 @@ test('伺いでない返答は未決事項に載らない', async ($, on) => {
   // ファイルの読み書きは、試験の中だけの入れ物で代わりに受ける
   mock.env(on, { HOME: '/h' })
   const files = new Map<string, string>()
-  on('fs.exists', ($, e) => ({ value: files.has(e.path) }))
-  on('fs.read', ($, e) => ({ value: files.get(e.path) ?? '' }))
+  on('fs.exists', ($, e) => ({ value: files.has(key(e.path)) }))
+  on('fs.read', ($, e) => ({ value: files.get(key(e.path)) ?? '' }))
   on('fs.write', ($, e) => {
-    files.set(e.path, e.text)
+    files.set(key(e.path), e.text)
     return { value: undefined }
   })
   await $.turn.complete({
@@ -80,10 +83,10 @@ test('控え帳についての伺いは未決事項に入れない', async ($, o
   on('turn.complete', ($, e) => ({ text: e.answer }))
   mock.env(on, { HOME: '/h' })
   const files = new Map<string, string>()
-  on('fs.exists', ($, e) => ({ value: files.has(e.path) }))
-  on('fs.read', ($, e) => ({ value: files.get(e.path) ?? '' }))
+  on('fs.exists', ($, e) => ({ value: files.has(key(e.path)) }))
+  on('fs.read', ($, e) => ({ value: files.get(key(e.path)) ?? '' }))
   on('fs.write', ($, e) => {
-    files.set(e.path, e.text)
+    files.set(key(e.path), e.text)
     return { value: undefined }
   })
   await $.turn.complete({
