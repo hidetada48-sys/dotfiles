@@ -23,6 +23,8 @@ const pending = atom({ plugin: 'senmu-panel', key: 'pending' } as const, [] as P
 const notes = atom({ plugin: 'senmu-panel', key: 'notes' } as const, [] as NoteItem[])
 const sideAnswer = atom({ plugin: 'senmu-panel', key: 'sideAnswer' } as const, '')
 const isSideBusy = atom({ plugin: 'senmu-panel', key: 'isSideBusy' } as const, false)
+// 控え帳の入力欄の番号。書くたびに1つ増やして新しい欄に替え、書いた文を消す（2026-10-13 専務指摘「書いたものが消えない」）
+const noteInputNo = atom({ plugin: 'senmu-panel', key: 'noteInputNo' } as const, 0)
 
 // PCをまたいで残す値の置き場（そのPCの中）
 const STORE_PENDING = 'pending'
@@ -165,7 +167,9 @@ async function pullOncePerDay($: Dollar): Promise<void> {
   await $.fs.write(`${h}/.claude/state/senmu-pull-result.txt`, `${startedAt} 開始／${await stamp($)} 終了：${summary}\n`)
 }
 
-// 全リポジトリにリモートの最新を取り込む。保存していない変更がある所は取り込まず、最初の返答で私に伺わせる
+// 全リポジトリにリモートの最新を取り込む。
+// ★2026-10-13 専務指示「pullするのにいちいち細かいことを言われてこなかった」：保存していない変更があっても
+//   一時退避して取り込み、戻す（--autostash）。専務には伺わない。戻すときに同じ行が重なったときだけ私に知らせる
 async function pullAll($: Dollar): Promise<string> {
   const done: string[] = []
   const dirty: string[] = []
@@ -173,17 +177,14 @@ async function pullAll($: Dollar): Promise<string> {
   for (const repo of await findRepos($)) {
     const name = repo.split('/').pop() ?? repo
     try {
-      const st = await $.process.run(['git', '-C', repo, 'status', '--porcelain'])
-      if (st.stdout.trim() !== '') {
-        dirty.push(name)
-        continue
-      }
       // 通信がほぼ止まったら git 自身が約15秒で中断する（起動を長く待たせない）
       const r = await $.process.run(
-        ['git', '-C', repo, '-c', 'http.lowSpeedLimit=1000', '-c', 'http.lowSpeedTime=15', 'pull', '--ff-only'],
+        ['git', '-C', repo, '-c', 'http.lowSpeedLimit=1000', '-c', 'http.lowSpeedTime=15', 'pull', '--ff-only', '--autostash'],
         { timeoutMs: 60000 },
       )
-      if (r.exitCode === 0) done.push(name)
+      const said = `${r.stdout}\n${r.stderr}`
+      if (/autostash/i.test(said) && /conflict/i.test(said)) dirty.push(name)   // 退避した変更を戻すときに重なった
+      else if (r.exitCode === 0) done.push(name)
       else failed.push(`${name}（${(r.stderr || r.stdout).trim().split('\n')[0] ?? ''}）`)
     } catch (err) {
       failed.push(`${name}（${String(err).slice(0, 60)}）`)
@@ -191,7 +192,7 @@ async function pullAll($: Dollar): Promise<string> {
   }
   const summary =
     `取り込み済み ${done.length}件` +
-    (dirty.length ? `／保存していない変更あり ${dirty.length}件` : '') +
+    (dirty.length ? `／変更が重なった ${dirty.length}件` : '') +
     (failed.length ? `／失敗 ${failed.length}件` : '')
   $.ui.toast(`最新の取り込み：${summary}`)
   // 保存していない変更・失敗は、専務の発言としてチャットに出さず、私への知らせ（システムの指示）で渡す
@@ -200,7 +201,7 @@ async function pullAll($: Dollar): Promise<string> {
       '【操作盤：起動時の最新の取り込みの結果（専務には画面右下に件数だけ出ている）】',
       `取り込み済み：${done.join('、') || 'なし'}`,
     ]
-    if (dirty.length) lines.push(`保存していない変更があり取り込まなかった：${dirty.join('、')}。最初の返答で変更の中身を示し、破棄するか残すかを伺うこと。`)
+    if (dirty.length) lines.push(`取り込んだが、手元の未保存の変更を戻すときに同じ行が重なった：${dirty.join('、')}。重なったファイル名だけを最初の返答で報告すること（破棄するか残すかは伺わない）。`)
     if (failed.length) lines.push(`取り込めなかった：${failed.join('、')}。原因を調べて最初の返答で報告すること。`)
     await update($, pullNote, () => lines.join('\n'))
   }
@@ -211,9 +212,8 @@ async function pullAll($: Dollar): Promise<string> {
 // ★2026-10-13 専務指摘「お前がお前に言っているのか？俺に見える必要は全くない」：
 //   ボタンの文は専務の発言としてチャットに出るため、Claude あての指示（両リポジトリの確認・控え帳の件数）を混ぜない。
 //   両リポジトリの確認は作業の決まり（CLAUDE.md の保存3点セット）にある
+// ★2026-10-13 専務指示「保存のたびに控え帳に対処するルールはいらない」：控え帳の残りの件数は出さない
 async function saveAll($: Dollar): Promise<void> {
-  const left = (await loadNotes($)).filter(n => n.status === 'open').length
-  $.ui.toast(`控え帳の残り：${left}件`)
   await send($, '今日の作業をコミット・プッシュ・記憶まで保存して。')
 }
 
@@ -311,6 +311,7 @@ export const register: Register = on => {
     const pend = await read($, pending)
     const noteList = await read($, notes)
     const open = noteList.filter(n => n.status === 'open')
+    const noteNo = await read($, noteInputNo)
 
     // 切り替えのボタン
     const tabs: { key: Tab; label: string }[] = [
@@ -381,17 +382,21 @@ export const register: Register = on => {
       body = (
         <Box flexDirection="column" gap={1}>
           {Input ? (
-            <Input
-              key="note-new"
-              autoFocus
-              placeholder="例：返答が長すぎた"
-              submitLabel="控え帳に書く"
-              onSubmit={async (text: string) => {
-                if (text.trim() === '') return
-                await addNote($, 'senmu', text.trim())
-                $.ui.toast('控え帳に書きました')
-              }}
-            />
+            // 右側の窓の横幅いっぱいに広げる（欄は1行だけ＝Claude Code 本体の入力欄の仕様）
+            <Box key="note-new-box" width="100%">
+              <Input
+                key={`note-new-${noteNo}`}
+                autoFocus
+                placeholder="例：返答が長すぎた"
+                submitLabel="控え帳に書く"
+                onSubmit={async (text: string) => {
+                  if (text.trim() === '') return
+                  await addNote($, 'senmu', text.trim())
+                  await update($, noteInputNo, n => n + 1)   // 新しい欄に替えて、書いた文を消す
+                  $.ui.toast('控え帳に書きました')
+                }}
+              />
+            </Box>
           ) : (
             <Text dimColor>この画面では文字を打てません。端末かデスクトップの画面で開いてください。</Text>
           )}
