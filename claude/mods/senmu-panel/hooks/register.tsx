@@ -1,6 +1,11 @@
 // 専務の操作盤
-// ・入力欄の上：〔保存3点〕〔横で質問〕〔控え帳〕（いつも出す）と、起動時の〔最新を取り込む〕
+// ・入力欄の上：〔保存3点〕〔横で質問〕〔控え帳〕（いつも出す）
 // ・右側の窓（/panel で開く）：〔未決事項〕〔横で質問〕〔控え帳〕を切り替えて表示
+// ・1日1回、その日の最初の起動で、全リポジトリに最新を自動で取り込む
+//   ★2026-10-13 専務指摘：〔最新を取り込む〕ボタンは最初の依頼を送ったあと（作業中）にしか出ず、
+//     最初に取り込めなかった。起動の処理は画面を開いた時点で動くので、ボタンをやめて起動時に自動で取り込む
+//     （「1日1回最初の起動時だけでよい」＝専務指示）。業務リポジトリの1日1回の取り込み（session-git-pull.sh）は
+//     同時に取り込むとぶつかるため、設定から外した
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
@@ -12,9 +17,8 @@ const TITLE = '専務の操作盤'
 
 // 画面の表示に使う値（会話の間だけ。再読み込みでも消えない）
 const tab = atom({ plugin: 'senmu-panel', key: 'tab' } as const, 'pending' as Tab)
-const isPullOffered = atom({ plugin: 'senmu-panel', key: 'isPullOffered' } as const, false)
-const isPullAsked = atom({ plugin: 'senmu-panel', key: 'isPullAsked' } as const, false)
-const pullStatus = atom({ plugin: 'senmu-panel', key: 'pullStatus' } as const, '')
+// 起動時の取り込みで、私が最初の返答で扱うこと（保存していない変更・失敗）。扱ったら空にする
+const pullNote = atom({ plugin: 'senmu-panel', key: 'pullNote' } as const, '')
 const pending = atom({ plugin: 'senmu-panel', key: 'pending' } as const, [] as Pending[])
 const notes = atom({ plugin: 'senmu-panel', key: 'notes' } as const, [] as NoteItem[])
 const sideAnswer = atom({ plugin: 'senmu-panel', key: 'sideAnswer' } as const, '')
@@ -142,9 +146,27 @@ async function findRepos($: Dollar): Promise<string[]> {
   return repos
 }
 
-// 全リポジトリにリモートの最新を取り込む。保存していない変更がある所は取り込まず、私に伺わせる
-async function pullAll($: Dollar): Promise<void> {
-  await update($, pullStatus, () => '取り込み中…')
+// 今日の日付を「2026-10-13」の形で（そのPCの時刻）
+async function today($: Dollar): Promise<string> {
+  return (await stamp($)).slice(0, 10)
+}
+
+// その日の最初の起動だけ取り込む。取り込んだ日と結果は、そのPCの中のファイルに残す
+//   senmu-pull-day.txt＝最後に取り込んだ日／senmu-pull-result.txt＝取り込んだ時刻と結果（時刻の確かめ用）
+async function pullOncePerDay($: Dollar): Promise<void> {
+  const h = await home($)
+  const dayFile = `${h}/.claude/state/senmu-pull-day.txt`
+  const day = await today($)
+  if ((await $.fs.exists(dayFile)) && (await $.fs.read(dayFile)).trim() === day) return
+  // 成否によらず今日は済とする（失敗しても毎回の起動でやり直さない）
+  await $.fs.write(dayFile, day + '\n')
+  const startedAt = await stamp($)
+  const summary = await pullAll($)
+  await $.fs.write(`${h}/.claude/state/senmu-pull-result.txt`, `${startedAt} 開始／${await stamp($)} 終了：${summary}\n`)
+}
+
+// 全リポジトリにリモートの最新を取り込む。保存していない変更がある所は取り込まず、最初の返答で私に伺わせる
+async function pullAll($: Dollar): Promise<string> {
   const done: string[] = []
   const dirty: string[] = []
   const failed: string[] = []
@@ -156,7 +178,11 @@ async function pullAll($: Dollar): Promise<void> {
         dirty.push(name)
         continue
       }
-      const r = await $.process.run(['git', '-C', repo, 'pull', '--ff-only'], { timeoutMs: 120000 })
+      // 通信がほぼ止まったら git 自身が約15秒で中断する（起動を長く待たせない）
+      const r = await $.process.run(
+        ['git', '-C', repo, '-c', 'http.lowSpeedLimit=1000', '-c', 'http.lowSpeedTime=15', 'pull', '--ff-only'],
+        { timeoutMs: 60000 },
+      )
       if (r.exitCode === 0) done.push(name)
       else failed.push(`${name}（${(r.stderr || r.stdout).trim().split('\n')[0] ?? ''}）`)
     } catch (err) {
@@ -167,18 +193,18 @@ async function pullAll($: Dollar): Promise<void> {
     `取り込み済み ${done.length}件` +
     (dirty.length ? `／保存していない変更あり ${dirty.length}件` : '') +
     (failed.length ? `／失敗 ${failed.length}件` : '')
-  await update($, pullStatus, () => summary)
-  await update($, isPullOffered, () => false)
   $.ui.toast(`最新の取り込み：${summary}`)
+  // 保存していない変更・失敗は、専務の発言としてチャットに出さず、私への知らせ（システムの指示）で渡す
   if (dirty.length || failed.length) {
     const lines = [
-      '起動時の〔最新を取り込む〕の結果です。',
+      '【操作盤：起動時の最新の取り込みの結果（専務には画面右下に件数だけ出ている）】',
       `取り込み済み：${done.join('、') || 'なし'}`,
     ]
-    if (dirty.length) lines.push(`保存していない変更があり取り込まなかった：${dirty.join('、')}。変更の中身を見せて、破棄するか残すかを伺って。`)
-    if (failed.length) lines.push(`取り込めなかった：${failed.join('、')}。原因を調べて報告して。`)
-    await $.prompt.submit({ text: lines.join('\n') })
+    if (dirty.length) lines.push(`保存していない変更があり取り込まなかった：${dirty.join('、')}。最初の返答で変更の中身を示し、破棄するか残すかを伺うこと。`)
+    if (failed.length) lines.push(`取り込めなかった：${failed.join('、')}。原因を調べて最初の返答で報告すること。`)
+    await update($, pullNote, () => lines.join('\n'))
   }
+  return summary
 }
 
 // 保存3点：コミット・プッシュ・記憶を頼む。控え帳の残りの件数は操作盤の画面だけに出す
@@ -198,7 +224,7 @@ async function openTab($: Dollar, t: Tab): Promise<void> {
 }
 
 export const register: Register = on => {
-  // 会話の開始：/panel を用意し、起動時の〔最新を取り込む〕を出す
+  // 会話の開始：/panel を用意し、その日の最初の起動なら最新を取り込む
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'panel', description: '専務の操作盤を開く' })
     try {
@@ -207,11 +233,14 @@ export const register: Register = on => {
     } catch {
       // 読めなくても会話は続ける
     }
-    // 〔最新を取り込む〕は会話の最初（まだ一度もやり取りしていないとき）だけ出す。
-    // 操作盤を直して読み込み直したときは、出ていても下げる
-    const isFirst = (await $.session.turns()) === 0 && !(await read($, isPullAsked))
-    await update($, isPullAsked, () => true)
-    await update($, isPullOffered, () => isFirst)
+    // 取り込みは会話の始まり（まだ一度もやり取りしていないとき）だけ。操作盤を直して読み込み直したときはしない
+    if ((await $.session.turns()) === 0) {
+      try {
+        await pullOncePerDay($)
+      } catch (err) {
+        $.ui.toast(`最新の取り込みに失敗：${String(err).slice(0, 60)}`)
+      }
+    }
     try {
       const list = await loadNotes($)
       await update($, notes, () => list)
@@ -227,10 +256,12 @@ export const register: Register = on => {
     return { text: '専務の操作盤を開きました。' }
   })
 
-  // 専務が何か送ったら、〔最新を取り込む〕は下げる
+  // 起動時の取り込みで扱うことがあれば、最初の依頼に私あての知らせを添える（専務の画面には出ない）
   on('prompt.submit', async ($, e, next) => {
-    if ((await read($, pullStatus)) !== '取り込み中…') await update($, isPullOffered, () => false)
-    return next(e)
+    const note = await read($, pullNote)
+    if (note === '') return next(e)
+    await update($, pullNote, () => '')
+    return next({ ...e, context: [...(e.context ?? []), note] })
   }).catch(($, e, next) => next(e)) // 失敗しても専務の依頼は必ず通す
 
   // 返答の終わり：伺いで終わっていれば未決事項に載せる
@@ -259,24 +290,13 @@ export const register: Register = on => {
   // 入力欄の上の帯
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    const offered = await read($, isPullOffered)
-    const status = await read($, pullStatus)
-    const { Box, Button, Text } = $.ui.resolve(e)
+    const { Box, Button } = $.ui.resolve(e)
 
     return (
-      <Box flexDirection="column">
-        <Box gap={1}>
-          <Button key="save" label="保存3点" onPress={() => saveAll($)} />
-          <Button key="open-ask" label="横で質問" onPress={() => openTab($, 'ask')} />
-          <Button key="open-notes" label="控え帳" onPress={() => openTab($, 'notes')} />
-        </Box>
-        {offered && (
-          <Box gap={1}>
-            <Button key="pull" label="最新を取り込む" variant="primary" onPress={() => pullAll($)} />
-            <Button key="pull-skip" label="今回はしない" onPress={() => update($, isPullOffered, () => false)} />
-            {status !== '' && <Text dimColor>{status}</Text>}
-          </Box>
-        )}
+      <Box gap={1}>
+        <Button key="save" label="保存3点" onPress={() => saveAll($)} />
+        <Button key="open-ask" label="横で質問" onPress={() => openTab($, 'ask')} />
+        <Button key="open-notes" label="控え帳" onPress={() => openTab($, 'notes')} />
       </Box>
     )
   })

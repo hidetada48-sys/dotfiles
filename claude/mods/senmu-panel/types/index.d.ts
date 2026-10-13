@@ -22,9 +22,7 @@ declare module 'claude-code' {
   interface PluginState {
     'senmu-panel': {
       tab: Tab
-      isPullOffered: boolean
-      isPullAsked: boolean
-      pullStatus: string
+      pullNote: string
       pending: Pending[]
       notes: NoteItem[]
       sideAnswer: string
