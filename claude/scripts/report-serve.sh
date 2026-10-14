@@ -12,6 +12,12 @@ OUT="$REPO/.reports_html"
 
 [ -d "$REPO" ] || exit 0
 
+# 保存（コミット）のときの点検（githooks/pre-commit＝目次の再発防止・2026-10-14 専務承認）を、
+# どちらのPCでも効かせる。git の設定はPCごとなので、起動のたびに未設定なら設定する（静かに）。
+if [ -f "$REPO/githooks/pre-commit" ] && [ "$(git -C "$REPO" config core.hooksPath 2>/dev/null)" != "githooks" ]; then
+  git -C "$REPO" config core.hooksPath githooks >/dev/null 2>&1
+fi
+
 # すでに listen していれば起こさない（エクセルの受付 8831 は下で別に見る）
 UP8830=0
 if command -v curl >/dev/null 2>&1; then
