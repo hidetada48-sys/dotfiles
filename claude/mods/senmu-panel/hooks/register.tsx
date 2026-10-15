@@ -17,7 +17,7 @@ const TITLE = '専務の操作盤'
 
 // 画面の表示に使う値（会話の間だけ。再読み込みでも消えない）
 const tab = atom({ plugin: 'senmu-panel', key: 'tab' } as const, 'pending' as Tab)
-// 起動時の取り込みで、私が最初の返答で扱うこと（保存していない変更・失敗）。扱ったら空にする
+// 起動時の取り込みの結果（全リポジトリ分）。私が最初の返答で報告する。渡したら空にする
 const pullNote = atom({ plugin: 'senmu-panel', key: 'pullNote' } as const, '')
 const pending = atom({ plugin: 'senmu-panel', key: 'pending' } as const, [] as Pending[])
 const notes = atom({ plugin: 'senmu-panel', key: 'notes' } as const, [] as NoteItem[])
@@ -170,42 +170,61 @@ async function pullOncePerDay($: Dollar): Promise<void> {
 // 全リポジトリにリモートの最新を取り込む。
 // ★2026-10-13 専務指示「pullするのにいちいち細かいことを言われてこなかった」：保存していない変更があっても
 //   一時退避して取り込み、戻す（--autostash）。専務には伺わない。戻すときに同じ行が重なったときだけ私に知らせる
+// ★2026-10-15 専務指示「取り込みの結果を報告する運用に変えてほしい」「すべての結果を報告するんだよな」：
+//   成功だけの日も含めて毎回、全リポジトリの結果をリポジトリ名ごとに、私の最初の返答の冒頭で報告する
 async function pullAll($: Dollar): Promise<string> {
-  const done: string[] = []
+  const results: string[] = []   // リポジトリごとの結果（「mino-sakura-hq 更新3件を取り込み」など）
   const dirty: string[] = []
   const failed: string[] = []
+  let doneCount = 0
   for (const repo of await findRepos($)) {
     const name = repo.split('/').pop() ?? repo
     try {
+      // 取り込む前の位置を控え、あとで何件の更新を取り込んだかを数える
+      const before = (await $.process.run(['git', '-C', repo, 'rev-parse', 'HEAD'], { timeoutMs: 10000 })).stdout.trim()
       // 通信がほぼ止まったら git 自身が約15秒で中断する（起動を長く待たせない）
       const r = await $.process.run(
         ['git', '-C', repo, '-c', 'http.lowSpeedLimit=1000', '-c', 'http.lowSpeedTime=15', 'pull', '--ff-only', '--autostash'],
         { timeoutMs: 60000 },
       )
       const said = `${r.stdout}\n${r.stderr}`
-      if (/autostash/i.test(said) && /conflict/i.test(said)) dirty.push(name)   // 退避した変更を戻すときに重なった
-      else if (r.exitCode === 0) done.push(name)
-      else failed.push(`${name}（${(r.stderr || r.stdout).trim().split('\n')[0] ?? ''}）`)
+      const isDirty = /autostash/i.test(said) && /conflict/i.test(said)   // 退避した変更を戻すときに重なった
+      if (r.exitCode !== 0 && !isDirty) {
+        const why = (r.stderr || r.stdout).trim().split('\n')[0] ?? ''
+        failed.push(name)
+        results.push(`${name} 失敗（${why}）`)
+        continue
+      }
+      doneCount++
+      const n = before
+        ? Number((await $.process.run(['git', '-C', repo, 'rev-list', '--count', `${before}..HEAD`], { timeoutMs: 10000 })).stdout.trim()) || 0
+        : 0
+      let line = n > 0 ? `${name} 更新${n}件を取り込み` : `${name} 変更なし`
+      if (isDirty) {
+        dirty.push(name)
+        line += '（手元の未保存の変更を戻すときに同じ行が重なった）'
+      }
+      results.push(line)
     } catch (err) {
-      failed.push(`${name}（${String(err).slice(0, 60)}）`)
+      failed.push(name)
+      results.push(`${name} 失敗（${String(err).slice(0, 60)}）`)
     }
   }
   const summary =
-    `取り込み済み ${done.length}件` +
+    `取り込み済み ${doneCount}件` +
     (dirty.length ? `／変更が重なった ${dirty.length}件` : '') +
     (failed.length ? `／失敗 ${failed.length}件` : '')
   $.ui.toast(`最新の取り込み：${summary}`)
-  // 保存していない変更・失敗は、専務の発言としてチャットに出さず、私への知らせ（システムの指示）で渡す
-  if (dirty.length || failed.length) {
-    const lines = [
-      '【操作盤：起動時の最新の取り込みの結果（専務には画面右下に件数だけ出ている）】',
-      `取り込み済み：${done.join('、') || 'なし'}`,
-    ]
-    if (dirty.length) lines.push(`取り込んだが、手元の未保存の変更を戻すときに同じ行が重なった：${dirty.join('、')}。重なったファイル名だけを最初の返答で報告すること（破棄するか残すかは伺わない）。`)
-    if (failed.length) lines.push(`取り込めなかった：${failed.join('、')}。原因を調べて最初の返答で報告すること。`)
-    await update($, pullNote, () => lines.join('\n'))
-  }
-  return summary
+  // 結果は専務の発言としてチャットに出さず、私への知らせ（システムの指示）で渡す。毎回渡す
+  const lines = [
+    '【操作盤：起動時の最新の取り込みの結果】',
+    `最新の取り込み：${results.join('／') || '対象のリポジトリなし'}`,
+    '上の1行を、最初の返答の冒頭にそのまま書いて専務に報告すること（成功だけの日も必ず書く）。',
+  ]
+  if (dirty.length) lines.push(`同じ行が重なったリポジトリ（${dirty.join('、')}）は、重なったファイル名も報告すること（破棄するか残すかは伺わない）。`)
+  if (failed.length) lines.push(`失敗したリポジトリ（${failed.join('、')}）は、原因を調べて同じ返答で報告すること。`)
+  await update($, pullNote, () => lines.join('\n'))
+  return `${summary}：${results.join('／')}`
 }
 
 // 保存3点：コミット・プッシュ・記憶を頼む。控え帳の残りの件数は操作盤の画面だけに出す
@@ -256,7 +275,7 @@ export const register: Register = on => {
     return { text: '専務の操作盤を開きました。' }
   })
 
-  // 起動時の取り込みで扱うことがあれば、最初の依頼に私あての知らせを添える（専務の画面には出ない）
+  // 起動時の取り込みの結果を、最初の依頼に私あての知らせとして添える（専務の画面には出ない）
   on('prompt.submit', async ($, e, next) => {
     const note = await read($, pullNote)
     if (note === '') return next(e)

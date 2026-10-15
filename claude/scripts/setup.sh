@@ -148,12 +148,7 @@ fi
 # ========================================
 # ★2026-09-09 追加: 片方のPCで直したスクリプトを、もう片方が git pull していないと
 #   同じ不具合が延々と再発する（記憶がDriveに上がらない不具合の再発要因そのもの）。
-#   セッション開始時に「遅れているか」だけ見て知らせる。pull は自動でやらない
-#   （未コミットの変更を勝手に巻き込まないため）。
-if [ -d "$DOTFILES/.git" ] && command -v git >/dev/null 2>&1; then
-  timeout 10 git -C "$DOTFILES" fetch --quiet 2>/dev/null
-  BEHIND=$(git -C "$DOTFILES" rev-list --count HEAD..@{u} 2>/dev/null)
-  if [ -n "$BEHIND" ] && [ "$BEHIND" -gt 0 ] 2>/dev/null; then
-    echo "[setup] dotfiles が $BEHIND コミット遅れています。'git -C ~/dotfiles pull' で最新のスクリプトを取り込んでください。"
-  fi
-fi
+#   セッション開始時に「遅れているか」だけ見て知らせていた。
+# ★2026-10-15 専務承認で廃止：操作盤（mods の senmu-panel）がその日最初の起動時に dotfiles も含めて
+#   取り込むようになったため不要。ここで同時に fetch すると操作盤の pull とぶつかり
+#   「Cannot fast-forward to multiple branches」で dotfiles だけ取り込めなかった（2026-10-15 発生）。

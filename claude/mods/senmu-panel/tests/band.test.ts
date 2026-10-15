@@ -101,8 +101,13 @@ test('控え帳についての伺いは未決事項に入れない', async ($, o
   await pane.unmount()
 })
 
+
 // 起動時の取り込みの試験で使う入れ物（ファイルと git の呼び出しを試験の中だけで受ける）
-function mockPull(on: Parameters<Parameters<typeof test>[1]>[1], dirty: string[] = []) {
+//   updates＝リポジトリごとに取り込む更新の件数／failed＝取り込みに失敗させるリポジトリ
+function mockPull(
+  on: Parameters<Parameters<typeof test>[1]>[1],
+  opts: { updates?: Record<string, number>; failed?: string[] } = {},
+) {
   mock.env(on, { HOME: '/h' })
   // 会話の開始・/panel の登録・やり取りの回数（まだ0回）を試験の中で受ける
   on('session.start', ($, e) => ({ cwd: e.cwd }))
@@ -126,10 +131,14 @@ function mockPull(on: Parameters<Parameters<typeof test>[1]>[1], dirty: string[]
   }))
   on('process.run', ($, e) => {
     const repo = key(e.argv[2] ?? '').split('/').pop() ?? ''
-    const isStatus = e.argv.includes('status')
-    git.push(`${repo}:${isStatus ? 'status' : 'pull'}`)
-    const out = isStatus && dirty.includes(repo) ? ' M a.txt\n' : ''
-    return { value: { exitCode: 0, stdout: out, stderr: '' } as never }
+    const ok = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } as never })
+    if (e.argv.includes('rev-parse')) return ok('abc123\n')
+    if (e.argv.includes('rev-list')) return ok(`${opts.updates?.[repo] ?? 0}\n`)
+    git.push(`${repo}:pull`)
+    if (opts.failed?.includes(repo)) {
+      return { value: { exitCode: 128, stdout: '', stderr: 'fatal: Cannot fast-forward to multiple branches.\n' } as never }
+    }
+    return ok('')
   })
   return { files, git }
 }
@@ -139,23 +148,36 @@ test('その日の最初の起動で全リポジトリを取り込み、同じ�
   mock.store(on)
   const { files, git } = mockPull(on)
   await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
-  expect(git.filter(g => g.endsWith(':pull'))).toEqual(['mino-sakura-hq:pull', 'dotfiles:pull'])
+  expect(git).toEqual(['mino-sakura-hq:pull', 'dotfiles:pull'])
   expect(files.get('/h/.claude/state/senmu-pull-result.txt')?.includes('取り込み済み 2件')).toBe(true)
   git.length = 0
   await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
   expect(git.length).toBe(0)
 })
 
-test('保存していない変更があるリポジトリは取り込まず、私への指示に伺いを足す', async ($, on) => {
+test('成功だけの日も、全リポジトリの結果をリポジトリ名ごとに最初の依頼に添える', async ($, on) => {
   mock.clock(on)
   mock.store(on)
-  const { git } = mockPull(on, ['dotfiles'])
+  mockPull(on, { updates: { 'mino-sakura-hq': 3 } })
   on('prompt.submit', ($, e) => ({ text: e.text, context: e.context }))
   await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
-  expect(git.includes('dotfiles:pull')).toBe(false)
   // 最初の依頼に、私あての知らせ（専務の画面には出ない）として添わる。2回目の依頼には添えない
   const r1 = await $.prompt.submit({ text: '定例業務' } as never)
-  expect((r1.context ?? []).some(c => c.includes('dotfiles'))).toBe(true)
+  const note = (r1.context ?? []).join('\n')
+  expect(note.includes('最新の取り込み：mino-sakura-hq 更新3件を取り込み／dotfiles 変更なし')).toBe(true)
+  expect(note.includes('成功だけの日も必ず書く')).toBe(true)
   const r2 = await $.prompt.submit({ text: '次の依頼' } as never)
   expect((r2.context ?? []).length).toBe(0)
+})
+
+test('失敗したリポジトリは原因の文と、原因を調べる指示を添える', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  mockPull(on, { failed: ['dotfiles'] })
+  on('prompt.submit', ($, e) => ({ text: e.text, context: e.context }))
+  await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
+  const r1 = await $.prompt.submit({ text: '定例業務' } as never)
+  const note = (r1.context ?? []).join('\n')
+  expect(note.includes('mino-sakura-hq 変更なし／dotfiles 失敗（fatal: Cannot fast-forward to multiple branches.）')).toBe(true)
+  expect(note.includes('失敗したリポジトリ（dotfiles）は、原因を調べて')).toBe(true)
 })
