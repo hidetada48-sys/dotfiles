@@ -1,5 +1,5 @@
 // 専務の操作盤
-// ・入力欄の上：〔保存3点〕〔横で質問〕〔控え帳〕（いつも出す）
+// ・入力欄の上：その日の最初の起動なら取り込みの結果の1行と、〔保存3点〕〔横で質問〕〔控え帳〕（いつも出す）
 // ・右側の窓（/panel で開く）：〔未決事項〕〔横で質問〕〔控え帳〕を切り替えて表示
 // ・1日1回、その日の最初の起動で、全リポジトリに最新を自動で取り込む
 //   ★2026-10-13 専務指摘：〔最新を取り込む〕ボタンは最初の依頼を送ったあと（作業中）にしか出ず、
@@ -19,6 +19,10 @@ const TITLE = '専務の操作盤'
 const tab = atom({ plugin: 'senmu-panel', key: 'tab' } as const, 'pending' as Tab)
 // 起動時の取り込みの結果（全リポジトリ分）。私が最初の返答で報告する。渡したら空にする
 const pullNote = atom({ plugin: 'senmu-panel', key: 'pullNote' } as const, '')
+// 起動時の取り込みの結果を、専務の画面（入力欄の上の帯）に出す1行。その会話の間ずっと出す
+// ★2026-10-16 専務指摘「取り込みの結果を出るようにしたのに出ていない」：結果は最初の依頼に添えて私に届くだけで、
+//   起動しただけでは画面に出なかった（右下の知らせは件数だけで、すぐ消える）。起動した時点で帯に出す
+const pullShown = atom({ plugin: 'senmu-panel', key: 'pullShown' } as const, '')
 const pending = atom({ plugin: 'senmu-panel', key: 'pending' } as const, [] as Pending[])
 const notes = atom({ plugin: 'senmu-panel', key: 'notes' } as const, [] as NoteItem[])
 const sideAnswer = atom({ plugin: 'senmu-panel', key: 'sideAnswer' } as const, '')
@@ -214,7 +218,9 @@ async function pullAll($: Dollar): Promise<string> {
     `取り込み済み ${doneCount}件` +
     (dirty.length ? `／変更が重なった ${dirty.length}件` : '') +
     (failed.length ? `／失敗 ${failed.length}件` : '')
-  $.ui.toast(`最新の取り込み：${summary}`)
+  const shown = `最新の取り込み：${results.join('／') || '対象のリポジトリなし'}`
+  $.ui.toast(shown)
+  await update($, pullShown, () => shown)
   // 結果は専務の発言としてチャットに出さず、私への知らせ（システムの指示）で渡す。毎回渡す
   const lines = [
     '【操作盤：起動時の最新の取り込みの結果】',
@@ -309,13 +315,17 @@ export const register: Register = on => {
   // 入力欄の上の帯
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
-    const { Box, Button } = $.ui.resolve(e)
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const shown = await read($, pullShown)
 
     return (
-      <Box gap={1}>
-        <Button key="save" label="保存3点" onPress={() => saveAll($)} />
-        <Button key="open-ask" label="横で質問" onPress={() => openTab($, 'ask')} />
-        <Button key="open-notes" label="控え帳" onPress={() => openTab($, 'notes')} />
+      <Box flexDirection="column">
+        {shown !== '' && <Text>{shown}</Text>}
+        <Box gap={1}>
+          <Button key="save" label="保存3点" onPress={() => saveAll($)} />
+          <Button key="open-ask" label="横で質問" onPress={() => openTab($, 'ask')} />
+          <Button key="open-notes" label="控え帳" onPress={() => openTab($, 'notes')} />
+        </Box>
       </Box>
     )
   })

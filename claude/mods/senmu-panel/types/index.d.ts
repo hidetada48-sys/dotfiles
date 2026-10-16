@@ -23,10 +23,12 @@ declare module 'claude-code' {
     'senmu-panel': {
       tab: Tab
       pullNote: string
+      pullShown: string
       pending: Pending[]
       notes: NoteItem[]
       sideAnswer: string
       isSideBusy: boolean
+      noteInputNo: number
     }
   }
 }

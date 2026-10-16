@@ -181,3 +181,16 @@ test('失敗したリポジトリは原因の文と、原因を調べる指示�
   expect(note.includes('mino-sakura-hq 変更なし／dotfiles 失敗（fatal: Cannot fast-forward to multiple branches.）')).toBe(true)
   expect(note.includes('失敗したリポジトリ（dotfiles）は、原因を調べて')).toBe(true)
 })
+
+test('起動した時点で、取り込みの結果を入力欄の上の帯に出す', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  mockPull(on, { updates: { 'mino-sakura-hq': 3 } })
+  await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'senmu-panel', component: 'AbovePrompt', surface, props: { hasSurvey: false } as never })
+    expect((await ui.find({ type: 'Text', text: /^最新の取り込み：/ }))?.text).toBe('最新の取り込み：mino-sakura-hq 更新3件を取り込み／dotfiles 変更なし')
+    expect((await ui.find({ key: 'save' }))?.text).toBe('保存3点')
+    await ui.unmount()
+  }
+})
