@@ -194,3 +194,21 @@ test('起動した時点で、取り込みの結果を入力欄の上の帯に�
     await ui.unmount()
   }
 })
+
+test('起動時の設定のフック（定例業務の表づくり）より先に取り込みを済ませる', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  const { git } = mockPull(on, { updates: { 'mino-sakura-hq': 14 } })
+  // 試験の中のこのフックが、操作盤より下で動く設定のフック（teirei-alert.sh）の代わり。動いた時点の取り込みを控える
+  const seenBySettingsHook: string[] = []
+  on('classic.SessionStart', ($, e) => {
+    seenBySettingsHook.push(...git)
+    return {}
+  })
+  await $.classic.SessionStart({ source: 'startup' } as never)
+  expect(seenBySettingsHook).toEqual(['mino-sakura-hq:pull', 'dotfiles:pull'])
+  // そのあとの会話の始まりでは、同じ日なので取り込み直さない
+  git.length = 0
+  await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
+  expect(git.length).toBe(0)
+})

@@ -171,6 +171,26 @@ async function pullOncePerDay($: Dollar): Promise<void> {
   await $.fs.write(`${h}/.claude/state/senmu-pull-result.txt`, `${startedAt} 開始／${await stamp($)} 終了：${summary}\n`)
 }
 
+// 取り込みの途中かどうか。会話の始まり（session.start）と起動時の設定のフック（classic.SessionStart）の
+// どちらが先に来ても、取り込みは1回だけ動かし、もう一方は終わるのを待つ
+let pullRunning: Promise<void> | null = null
+async function pullFirst($: Dollar): Promise<void> {
+  if (!pullRunning) {
+    pullRunning = (async () => {
+      // 取り込みは会話の始まり（まだ一度もやり取りしていないとき）だけ。操作盤を直して読み込み直したときはしない
+      if ((await $.session.turns()) !== 0) return
+      try {
+        await pullOncePerDay($)
+      } catch (err) {
+        $.ui.toast(`最新の取り込みに失敗：${String(err).slice(0, 60)}`)
+      }
+    })().finally(() => {
+      pullRunning = null
+    })
+  }
+  return pullRunning
+}
+
 // 全リポジトリにリモートの最新を取り込む。
 // ★2026-10-13 専務指示「pullするのにいちいち細かいことを言われてこなかった」：保存していない変更があっても
 //   一時退避して取り込み、戻す（--autostash）。専務には伺わない。戻すときに同じ行が重なったときだけ私に知らせる
@@ -258,20 +278,22 @@ export const register: Register = on => {
     } catch {
       // 読めなくても会話は続ける
     }
-    // 取り込みは会話の始まり（まだ一度もやり取りしていないとき）だけ。操作盤を直して読み込み直したときはしない
-    if ((await $.session.turns()) === 0) {
-      try {
-        await pullOncePerDay($)
-      } catch (err) {
-        $.ui.toast(`最新の取り込みに失敗：${String(err).slice(0, 60)}`)
-      }
-    }
+    await pullFirst($)
     try {
       const list = await loadNotes($)
       await update($, notes, () => list)
     } catch {
       // 控え帳が読めなくても会話は続ける
     }
+    return next(e)
+  })
+
+  // 起動時の設定のフック（定例業務の表を作る teirei-alert.sh など）より先に取り込む
+  // ★2026-10-17 専務承認（案1）：Linux で 10/16・10/17 と続けて、起動時に作った定例業務の表と、取り込む側の同じ表がぶつかり、
+  //   mino-sakura-hq を取り込めなかった。操作盤のフックは設定のフックより上で動くので、ここで取り込みを済ませてから
+  //   next(e)＝設定のフックへ渡す（取り込みが先・表づくりが後に固定する）
+  on('classic.SessionStart', async ($, e, next) => {
+    await pullFirst($)
     return next(e)
   })
 
