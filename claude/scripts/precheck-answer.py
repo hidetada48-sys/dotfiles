@@ -266,6 +266,74 @@ def stop_on_prose(body):
     return True
 
 
+OPTION_KEYS = ["仕組み", "操作", "画面", "良い点", "弱い点"]   # 案ごとに必ず書く5つ
+
+
+def thin_options(body):
+    """レポートの「案1」「案2」などの見出しごとに、5つの見出し（仕組み・操作・画面・良い点・弱い点）が
+    そろっているかを数え、欠けた案を (見出し, 欠けた物) で返す。AI は使わない（待ち時間なし）。
+    専務指摘 2026-10-17「これだけの説明で分かるわけがない」「文字数を超えたレポートを利用しているのに何事か」：
+    案2を「ショートカットを作る」の一言で出した。各案に5つの見出しが無ければ不合格にする"""
+    import re
+    lines = body.splitlines()
+    heads = [(i, len(m.group(1)), l.strip()) for i, l in enumerate(lines)
+             if (m := re.match(r"^\s*(#+)\s", l))]
+    out = []
+    for k, (i, level, title) in enumerate(heads):
+        if not re.match(r"^#+\s*案\s*[0-9０-９一二三四五]", title):
+            continue
+        end = next((j for j, lv, _ in heads[k + 1:] if lv <= level), len(lines))
+        sec = lines[i + 1:end]
+        # 行の頭（箇条書き・番号・見出しの印のあと、8字以内）に見出しの言葉があるかを見る
+        missing = [key for key in OPTION_KEYS
+                   if not any(re.match(r"^\s*(?:[-*+]|#+|\d+[.)．])\s*.{0,8}?" + key, l) for l in sec)]
+        if missing:
+            out.append((title.lstrip("# ")[:40], missing))
+    # 箇条書きで書いた案（「- 案1：…」）も見る。中身＝その行より深く字下げした行（10/17 の最初の稿はこの形だった）
+    for i, l in enumerate(lines):
+        m = re.match(r"^(\s*)[-*+]\s*\**案\s*[0-9０-９一二三四五]", l)
+        if not m:
+            continue
+        ind = len(m.group(1).expandtabs(4))
+        sec = []
+        for l2 in lines[i + 1:]:
+            if l2.strip() and len(l2) - len(l2.lstrip()) <= ind:
+                break
+            sec.append(l2)
+        if not any(s.strip() for s in sec):   # 子の行が無い＝案を指しているだけの行（「- 案1か案2か」）は見ない
+            continue
+        missing = [key for key in OPTION_KEYS
+                   if not any(re.match(r"^\s*(?:[-*+]|\d+[.)．])\s*.{0,8}?" + key, s) for s in sec)]
+        if missing:
+            out.append((l.strip().lstrip("-*+ ")[:40], missing))
+    return out
+
+
+def stop_on_thin_options(body):
+    bad = thin_options(body)
+    if not bad:
+        return False
+    print("NG：説明の足りない案がある。案ごとに次の5つを見出し（箇条書きの頭）で書いてから、もう一度 --report する：")
+    print("    仕組み（何がどう動くか）／専務の毎日の操作（何が変わるか）／画面に出るもの（例の文つき）／良い点／弱い点")
+    for title, missing in bad:
+        print(f"  「{title}」 … 無い：{'・'.join(missing)}")
+    return True
+
+
+BASIS_RE = __import__("re").compile(r"^\s*根拠\s*[：:]\s*\S", __import__("re").M)
+
+
+def stop_on_no_basis(inv):
+    """書き出しに「根拠」の欄が無ければ NG。AI は使わない。
+    専務指摘 2026-10-16「確固たる自信と裏付けのある正確な回答が準備できるのかどうかを図れないのか」：
+    「環境を選択」の意味を公式の説明を確かめずに推測で3回答えた。言い切る事柄ごとに、確かめた事実か推測かを先に書かせる"""
+    if BASIS_RE.search(inv or ""):
+        return False
+    print("NG：書き出しに「根拠」の欄が無い。言い切る事柄ごとに、確かめた事実か推測かを書いてから、もう一度測る：")
+    print("  根拠：〇〇は確認済み（何で確かめたか）／△△は推測（確かめられるなら確かめる。できなければ本文に「未確認」と書く）")
+    return True
+
+
 JARGON = Path(__file__).with_name("jargon_words.txt")
 
 
@@ -307,6 +375,7 @@ PLAIN_PROMPT = """あなたは、製紙会社の専務に出す業務報告の�
 〔1〕何を言いたいのかが伝わらない文
 〔2〕中身を言わずに言い回しだけで済ませた文＝何と何を比べるのか・誰が何をするのか・何を指すのかが、前後の文を読んでも分からない文
 〔3〕報告書として不適切な表現：書き手の作業日誌（何を読んだ・どのファイルを直した・プログラムを流した など）／書き手が独自に付けた呼び名／口語・くだけた言い方・感情的な言い方（「〜っぽい」「ざっくり」「とりあえず」「ちゃんと」「黙って」など）／プログラム名・ファイル名が文の主語
+〔4〕裏付けの無い断定：書き手の「答えの中身」の「根拠」で推測（未確認）とした事柄を、本文が確かなこととして言い切っている文（本文に「未確認」「推測」などと断っていれば挙げない。「根拠」が示されたときだけ見る）
 
 挙げない文：
 - 業務の物の名前（製品名 100S・130S、帳票名、日報アプリ、確認画面、切り抜き、品種名、一覧エクセル など）、人や会社の名前、数字は、そのままで分かる言葉として扱う
@@ -321,12 +390,13 @@ PLAIN_PROMPT = """あなたは、製紙会社の専務に出す業務報告の�
 - 「品種名に頼らない」（何をするのかが分からない）
 - 「質問への Gemini の答えでも、品種名が他と違う行があれば必ず書かせる」（誰に何を書かせるのかが分からない）
 - 「品種が2つなのに計が1つなので、85,000m を勤全体の計と判断した」（なぜそうなるのかの筋が通らない）
+- 「タスクバーの今の Claude から開くと取り込まれないのが弱点」（「今の Claude」が何を指すのか書いていない＝2026-10-17）
 見本（専務が「この日本語が正しい」と言った文＝挙げない）：
 - 「確認画面で専務がアプリに質問したとき、品種名がほかの行と違う行があれば、アプリは『1本目だけ角130Sと読んでいます』のように、その行を名指しして答える」
 - 「これまで確定した日報に無い品種名を読んだときは、確認画面にその行の紙の切り抜きを出し、『初めて出てきた品種名です。紙に書かれた品種名を入れてください』とお尋ねする」
 
 答えは次の JSON だけを返してください（説明の文は付けない）：
-{{"問題": [{{"文": "下書きの文をそのまま", "物差し": "1|2|3", "理由": "なぜ伝わらないか（短く）"}}]}}
+{{"問題": [{{"文": "下書きの文をそのまま", "物差し": "0|1|2|3|4", "理由": "なぜ伝わらないか（短く）"}}]}}
 問題が無ければ {{"問題": []}}
 
 {extra}
@@ -408,7 +478,8 @@ def stop_on_plain(msg, inventory="", check_answer=True):
     if not issues:
         return False
     print("NG：お尋ねに答え切っていない、または専務に伝わらない文がある。")
-    print("    〔0〕は足りない中身を足す（足して基準を超えたらレポートにする）。〔1〕〜〔3〕は言い方だけ直す（中身は減らさない）：")
+    print("    〔0〕は足りない中身を足す（足して基準を超えたらレポートにする）。〔1〕〜〔3〕は言い方だけ直す（中身は減らさない）。")
+    print("    〔4〕は確かめてから書くか、本文に「未確認」と書く：")
     for it in issues[:10]:
         print(f"  〔{it.get('物差し', '')}〕「{str(it.get('文', ''))[:70]}」")
         print(f"      → {it.get('理由', '')}")
@@ -447,7 +518,9 @@ if __name__ == "__main__":
     inv, body = split_inventory(src)
     if inv is None:                                       # ①
         print("NG：下書きの先頭に、答えの中身の書き出しが無い。次の形で書いてから、もう一度測る（書き出しは返答に含めない）：")
-        print("  <!-- 中身\n  結論：\n  理由：\n  数字：\n  選択肢：\n  次の一手：\n  -->")
+        print("  <!-- 中身\n  結論：\n  理由：\n  数字：\n  選択肢：\n  根拠：\n  次の一手：\n  -->")
+        sys.exit(1)
+    if stop_on_no_basis(inv):                             # ①' 根拠の欄（2026-10-17 専務承認）
         sys.exit(1)
     path = body_file(src, body)
     if rep:
@@ -456,7 +529,10 @@ if __name__ == "__main__":
             print("NG：レポートの置き場が指定されていない（または一覧に無い）。")
             print(PLACE_HELP)
             sys.exit(1)
-        if stop_on_prose(body) or stop_on_jargon(path) or stop_on_plain(body, inv, check_answer=False):
+        # 案ごとの5つの見出しは AI を使わずに数える（待ち時間なし・2026-10-17 専務承認）。
+        # レポート全体の「お尋ねに答え切っているか」の AI の点検は、待ち時間が増えるため加えない（同日 専務指示）
+        if (stop_on_prose(body) or stop_on_thin_options(body) or stop_on_jargon(path)
+                or stop_on_plain(body, inv, check_answer=False)):
             sys.exit(1)
         sys.exit(to_report(path, sys.argv[3] if len(sys.argv) >= 4 else "回答",
                            sys.argv[4] if len(sys.argv) >= 5 else None))
