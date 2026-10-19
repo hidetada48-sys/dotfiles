@@ -59,6 +59,15 @@
             "command": "bash ~/.claude/hooks/guard-read-size.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__ccd_turn__wrap_up",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/run-python.sh ~/.claude/hooks/wrapup-noask.py"
+          }
+        ]
       }
     ],
     "PostToolUse": [
