@@ -154,9 +154,15 @@ def _text_of(content):
 
 def scan_transcript(path):
     """トランスクリプトを1回走査し、(直近のユーザー発話, 直近のassistant発話) を返す"""
+    return scan_transcript3(path)[:2]
+
+
+def scan_transcript3(path):
+    """トランスクリプトを1回走査し、(直近のユーザー発話, 直近のassistant発話, 直近の専務の依頼) を返す。
+    直近の専務の依頼＝フックの差し戻し（Stop hook feedback）とスキルの本文などの裏の発話を除いた、最後のユーザー発話"""
     if not path or not os.path.exists(path):
-        return "", ""
-    user_text, asst_text = "", ""
+        return "", "", ""
+    user_text, asst_text, prompt = "", "", ""
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -172,11 +178,46 @@ def scan_transcript(path):
                     continue
                 if t == "user":
                     user_text = s
+                    if not e.get("isMeta") and not s.startswith("Stop hook feedback"):
+                        prompt = s
                 else:
                     asst_text = s
     except Exception:
-        return user_text, asst_text
-    return user_text, asst_text
+        return user_text, asst_text, prompt
+    return user_text, asst_text, prompt
+
+
+# ★2026-10-20 専務決定（控え帳 mvfayel44u8d・mvfsy0zb0iny）：測らなくてよい返答。
+#   正典＝mino-sakura-hq docs/plans/2026-10-20-測らなくてよい返答の設計.md
+#   種類A＝保存3点の報告／朝の取り込みの報告／保存の差し戻し後の報告。出す前の確認も、ここでの記録も一切しない。
+#   種類B＝種類A以外で、URLと改行・空白を除き150字以内、最後の行が伺いで終わらない返答。試しに種類Aと同じく一切しない
+#   （だめなら、出す前の1〜4＝中身の書き出し・長さ・呼び名・リンクだけ行う形に改める＝同日 専務決定）
+SAVE_BUTTON = "今日の作業をコミット・プッシュ・記憶まで保存して。"   # 操作盤の〔保存3点〕ボタンが送る文
+SHORT_LIMIT = int(os.environ.get("HTML_GATE_SHORT_LIMIT", "150"))
+ASK_END_RE = re.compile(r"(？|\?|ください。?|よろしいですか。?|伺います。?|お願いします。?)\s*$")
+
+
+def is_save_request(prompt):
+    """専務の依頼が保存3点（ボタンの文、または「保存」と「コミット・プッシュ・記憶」のどれかを含む依頼）か"""
+    p = prompt.strip()
+    if p == SAVE_BUTTON:
+        return True
+    return "保存" in p and any(w in p for w in ("コミット", "プッシュ", "記憶"))
+
+
+def exempt_kind(msg, last_user, prompt):
+    """測らなくてよい返答なら種類（"A保存"・"A朝"・"A差し戻し"・"B短い"）を、そうでなければ "" を返す"""
+    first = next((l.strip() for l in msg.split("\n") if l.strip()), "")
+    if first.startswith("最新の取り込み："):
+        return "A朝"
+    if last_user.startswith("Stop hook feedback") and "[保存3点セット]" in last_user:
+        return "A差し戻し"
+    if is_save_request(prompt):
+        return "A保存"
+    last = next((l.strip() for l in reversed(msg.split("\n")) if l.strip()), "")
+    if body_size(msg)[1] <= SHORT_LIMIT and not ASK_END_RE.search(last):
+        return "B短い"
+    return ""
 
 
 def main():
@@ -185,7 +226,7 @@ def main():
     except Exception:
         out("skip")
 
-    lu, last_asst = scan_transcript(d.get("transcript_path") or "")
+    lu, last_asst, prompt = scan_transcript3(d.get("transcript_path") or "")
 
     msg = d.get("last_assistant_message") or ""
     if isinstance(msg, list):  # 配列形式にも一応対応
@@ -198,6 +239,8 @@ def main():
         out("skip")
     key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
     if any(kw in lu for kw in SKIP_WORDS):
+        out("skip")
+    if exempt_kind(msg, lu, prompt):   # 測らなくてよい返答（2026-10-20 専務決定）は何も記録しない
         out("skip")
     # ★2026-10-05 専務指示：リンクの有無で基準を分けない。
     #   旧＝リンク付きの返答だけ「URLを除き3行・120字」。120字では中身が書けず、分かる日本語の点検に落ち続けた
