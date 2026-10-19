@@ -342,7 +342,14 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
-        {shown !== '' && <Text>{shown}</Text>}
+        {/* ★2026-10-19 専務指摘「朝一の取り込み結果がずっと出ている　消せない」：〔消す〕でこの会話の帯から消す
+            （次の日の最初の起動では、新しい取り込み結果がまた出る） */}
+        {shown !== '' && (
+          <Box gap={1}>
+            <Text>{shown}</Text>
+            <Button key="pull-hide" label="消す" onPress={() => update($, pullShown, () => '')} />
+          </Box>
+        )}
         <Box gap={1}>
           <Button key="save" label="保存3点" onPress={() => saveAll($)} />
           <Button key="open-ask" label="横で質問" onPress={() => openTab($, 'ask')} />

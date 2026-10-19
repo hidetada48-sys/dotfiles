@@ -195,6 +195,21 @@ test('起動した時点で、取り込みの結果を入力欄の上の帯に�
   }
 })
 
+test('取り込みの結果は〔消す〕を押すと帯から消え、ボタンは残る', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  mockPull(on, { updates: { 'mino-sakura-hq': 2 } })
+  await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'senmu-panel', component: 'AbovePrompt', surface: 'terminal', props: { hasSurvey: false } as never })
+  expect(await ui.find({ type: 'Text', text: /^最新の取り込み：/ })).toBeTruthy()
+  await ui.press({ key: 'pull-hide' })
+  await ui.unmount()
+  const ui2 = await $.ui.mount({ plugin: 'senmu-panel', component: 'AbovePrompt', surface: 'terminal', props: { hasSurvey: false } as never })
+  expect(await ui2.find({ type: 'Text', text: /^最新の取り込み：/ })).toBeFalsy()
+  expect((await ui2.find({ key: 'save' }))?.text).toBe('保存3点')
+  await ui2.unmount()
+})
+
 test('起動時の設定のフック（定例業務の表づくり）より先に取り込みを済ませる', async ($, on) => {
   mock.clock(on)
   mock.store(on)

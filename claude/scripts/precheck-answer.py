@@ -97,6 +97,21 @@ def dead_links(msg):
         else:
             pu = urllib.parse.urlparse(u)
             safe = urllib.parse.urlunparse(pu._replace(path=urllib.parse.quote(urllib.parse.unquote(pu.path)), fragment=""))
+            # ★説明資料は採点に合格した物だけ出す（2026-10-19 専務承認・tools/check_deck.py）。
+            #   前に作ったページが配信に残っていても、合格印が今の中身に合わなければ開けない物として扱う
+            md = repo / (urllib.parse.unquote(pu.path).lstrip("/")[:-5] + ".md") if pu.path.endswith(".html") else None
+            deck = repo / "tools/check_deck.py"
+            if md and md.exists() and deck.exists():
+                try:
+                    spec = importlib.util.spec_from_file_location("check_deck", deck)
+                    cd = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(cd)
+                    if cd.is_target(md) and not cd.verify(md):
+                        bad.append((u, "説明資料の採点に合格していない（python tools/check_deck.py で採点してから出す）"))
+                        continue
+                except Exception as e:
+                    bad.append((u, f"説明資料の採点の確認を読めない（{e}）"))
+                    continue
             try:
                 urllib.request.urlopen(safe, timeout=5)
             except Exception as e:
