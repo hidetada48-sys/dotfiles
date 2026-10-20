@@ -15,6 +15,11 @@
   - Edit / Write / MultiEdit で、名前に「説明資料」を含みスライドの形（<section）の md
     （日付が 2026-10-20 より前の資料＝承認の日より前にお出しした物は対象外）
   - Bash で、中身に「説明資料」と「<section」を含む python のプログラムを動かす（資料を作るプログラム）
+エクセル（2026-10-20 専務承認・物差しをエクセルへ広げる）：
+  - Edit / Write / MultiEdit で、エクセルを作る python のプログラム（中身に openpyxl と .xlsx を含む）を
+    新しく書くとき、または物差しの文書の「対象のエクセル」の表に載ったプログラムを直すとき
+  - 止める条件＝上の 1・2 に加え、この会話でエクセルの見本（原料仕入分析）の画像を見ていない。新しく書くときは 3 も
+  - 今あって表に無いプログラム（定例業務の作り直しなど）は止めない
 止めたら exit 2 で理由を私に返し（専務の画面には出ない）、記録（~/.claude/logs/deck-gate.log）に残す。
 """
 import datetime as dt
@@ -27,7 +32,9 @@ START = "2026-10-20"
 SAMPLE = "抄紙日報の評価と要因_説明資料_見本"
 SKILL = "setsumei-shiryo"
 # 説明資料を扱う仕組みのプログラム自身は、資料を作るプログラムとして数えない
-EXEMPT_PY = ("check_deck.py", "report_html.py", "precheck-answer.py", "check_links.py", "check_commit.py", "deck-gate.py")
+EXEMPT_PY = ("check_deck.py", "report_html.py", "precheck-answer.py", "check_links.py", "check_commit.py", "deck-gate.py",
+             "check_excel.py", "xlsx_opener.py", "excel_style.py", "print_xlsx.py", "analysis_glossary.py")
+EXCEL_SAMPLE = "原料仕入分析"   # エクセルの見本（見せ方と体裁）＝この名前の画像（excel_check/原料仕入分析/…jpg）を見たか
 
 APPROVE = re.compile(r"了承|承認(する|します|です|だ|で(いい|よい|良い|OK|ok)|。|！|!|\s|$)|^\s*承認|進めて|進めろ|それでやって"
                      r"|お願いします|作って|(?<![A-Za-zＡ-Ｚａ-ｚ])(?:ok|OK|Ok|ｏｋ|ＯＫ|Ｏｋ)(?![A-Za-zＡ-Ｚａ-ｚ])")
@@ -61,18 +68,53 @@ def full(w, cwd):
     return w
 
 
+def registered_programs(start):
+    """物差しの文書の「対象のエクセル」の表に載った作るプログラム（ファイル名）"""
+    d = norm(start)
+    for _ in range(8):
+        f = d.rstrip("/") + "/docs/説明資料の物差し.md"
+        if os.path.isfile(f):
+            t = read(f).split("## 対象のエクセル", 1)
+            if len(t) < 2:
+                return set()
+            out = set()
+            for line in t[1].split(chr(10) + "## ")[0].splitlines():
+                cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
+                if len(cells) >= 2 and cells[1].endswith(".py"):
+                    out.add(os.path.basename(cells[1]))
+            return out
+        d = os.path.dirname(d.rstrip("/"))
+    return set()
+
+
+def excel_target(tool, inp, cwd):
+    """エクセルを作るプログラムの書き込みなら (説明, 新しく作るか, "excel")"""
+    p = inp.get("file_path") or ""
+    if tool not in ("Edit", "Write", "MultiEdit") or not p.endswith(".py") or os.path.basename(p) in EXEMPT_PY:
+        return None
+    exists = os.path.isfile(p)
+    body = (inp.get("content") or "") + (inp.get("new_string") or "") + "".join(
+        e.get("new_string", "") for e in inp.get("edits") or [] if isinstance(e, dict))
+    src = body + (read(p) if exists else "")
+    if "openpyxl" not in src or ".xlsx" not in src:
+        return None
+    if exists and os.path.basename(p) not in registered_programs(os.path.dirname(norm(p)) or cwd):
+        return None
+    return (f"エクセルを作るプログラム {os.path.basename(norm(p))} の書き込み", not exists, "excel")
+
+
 def target(tool, inp, cwd):
-    """対象なら (説明, 新しく作るか) を返す。対象外なら None"""
+    """対象なら (説明, 新しく作るか, 種類) を返す。対象外なら None"""
     if tool in ("Edit", "Write", "MultiEdit"):
         p = inp.get("file_path") or ""
         if not is_deck_name(p):
-            return None
+            return excel_target(tool, inp, cwd)
         exists = os.path.isfile(p)
         body = (inp.get("content") or "") + (inp.get("new_string") or "") + "".join(
             e.get("new_string", "") for e in inp.get("edits") or [] if isinstance(e, dict))
         if "<section" not in body and "<section" not in (read(p) if exists else ""):
             return None
-        return (f"{os.path.basename(norm(p))} の書き込み", not exists)
+        return (f"{os.path.basename(norm(p))} の書き込み", not exists, "deck")
     if tool == "Bash":
         cmd = norm(inp.get("command", ""))
         for w in re.findall(r"[^\s\"'<>|;&]+\.py", cmd):
@@ -80,7 +122,7 @@ def target(tool, inp, cwd):
                 continue
             src = read(full(w, cwd))
             if "説明資料" in src and "<section" in src:
-                return (f"説明資料を作るプログラム {os.path.basename(w)} の実行", False)
+                return (f"説明資料を作るプログラム {os.path.basename(w)} の実行", False, "deck")
     return None
 
 
@@ -118,6 +160,19 @@ def read_sample(evs):
                 return True
             if b.get("name") == "Bash" and SAMPLE in inp.get("command", ""):
                 return True
+    return False
+
+
+def saw_excel_sample(evs):
+    """この会話でエクセルの見本（原料仕入分析）の画像を開いたか"""
+    for e in evs:
+        if e.get("type") != "assistant":
+            continue
+        for b in blocks(e):
+            if b.get("type") == "tool_use" and b.get("name") == "Read":
+                f = norm((b.get("input") or {}).get("file_path", ""))
+                if EXCEL_SAMPLE in f and f.lower().endswith((".jpg", ".png")):
+                    return True
     return False
 
 
@@ -176,11 +231,13 @@ def main():
     hit = target(data.get("tool_name", ""), data.get("tool_input") or {}, norm(data.get("cwd", "")))
     if not hit:
         return 0
-    what, is_new = hit
+    what, is_new, kind = hit
     evs = events(data.get("transcript_path", ""))
     lack = []
     if not read_sample(evs):
         lack.append("見本（production/やりとり/2026-10-17_抄紙日報の評価と要因_説明資料_見本.md）をこの会話で読んでいない")
+    if kind == "excel" and not saw_excel_sample(evs):
+        lack.append("エクセルの見本（原料仕入分析）の画像をこの会話で見ていない（tools/check_excel.py で書き出した excel_check/原料仕入分析/ の画像）")
     if not used_skill(evs):
         lack.append("説明資料の手順書（setsumei-shiryo スキル）をこの会話で使っていない")
     if is_new and not agreed_after_plan(evs):
