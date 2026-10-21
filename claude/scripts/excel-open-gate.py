@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
-"""エクセルを開く前の関門（PreToolUse / Bash）。2026-09-18 専務指示「機械的に必ず守られるルールに」。
+"""エクセルを開く前の点検（PreToolUse / Bash）。2026-09-18 専務指示・2026-10-21 クオリティ診断に改めた。
 
 Claude がエクセルを開くコマンド（start / xdg-open / Invoke-Item / explorer）を出したら、
-そのエクセルに「合格印」があるかを見る。合格印＝ tools/check_excel.py が
-〔中身の検査に合格〕かつ〔見た目の書き出しまで済んだ〕ときにだけ、その版（更新時刻・大きさ）で残す印。
-- 印が無い／エクセルが印の後に作り直された → 開かせない（exit 2）。検査を走らせるよう指示する
-- 対象は「今日作った・更新したエクセル」だけ（既存の古いエクセルは次に作り直すときに移す）
-- check_excel.py を持たないリポジトリのエクセルは対象外
-正典：mino-sakura-hq CLAUDE.md「エクセル成果物の体裁」／lib/excel_style.py
+エクセルの受付（tools/xlsx_opener.py の openable）と同じ判定で、開いてよいかを見る。
+- クオリティ診断（①か②）を伺って作った・直したエクセルで、合格前の物 → 開かせない（exit 2）
+- 定例の作り直し・過去の分析・原本は止めない（9/18 の「今日作った物は体裁検査の合格印が要る」はやめた）
+- tools/xlsx_opener.py を持たないリポジトリのエクセルは対象外
+正典：mino-sakura-hq docs/plans/2026-10-21-クオリティ診断の作り方（案）.md
 """
 import datetime as dt
 import json
@@ -48,23 +47,23 @@ def main():
             p = cwd / p
         if not p.exists():
             continue
-        # 検査ツールを持つリポジトリか（親をたどって tools/check_excel.py を探す）
-        repo = next((d for d in [p.parent, *p.parents] if (d / "tools" / "check_excel.py").exists()), None)
+        # 受付を持つリポジトリか（親をたどって tools/xlsx_opener.py を探す）
+        repo = next((d for d in [p.parent, *p.parents] if (d / "tools" / "xlsx_opener.py").exists()), None)
         if repo is None:
             continue
-        st = p.stat()
-        if dt.date.fromtimestamp(st.st_mtime) != dt.date.today():
-            continue   # 今日作った・更新したものだけ
-        stamp = Path(tempfile.gettempdir()) / "excel_check" / p.stem / "PASS"
-        ok = stamp.exists() and stamp.read_text(encoding="utf-8").strip() == f"{st.st_mtime_ns} {st.st_size}"
-        if not ok:
-            rel = os.path.relpath(p, repo)
-            bad.append(f"python tools/check_excel.py \"{rel}\"")
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("xlsx_opener", repo / "tools" / "xlsx_opener.py")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            code, _, msg, _ = mod.openable(os.path.relpath(p, repo).replace("\\", "/"))
+        except Exception:
+            continue   # 判定のプログラムが読めないときは止めない
+        if code != 200:
+            bad.append(f"{msg}（python tools/check_deck.py で採点する）")
     if bad:
         sys.stderr.write(
-            "[エクセル体裁の関門] このエクセルは体裁検査の合格印がありません（未検査、または検査後に作り直した）。\n"
-            "開く前に次を実行し、不合格なら lib/excel_style.py に従って直すこと。\n"
-            "合格したら、書き出された画像（全シート・全グラフ）をすべて開いて目で確かめてから開くこと。\n  "
+            "[クオリティ診断] このエクセルは合格前のため開けません。\n  "
             + "\n  ".join(bad) + "\n"
         )
         return 2

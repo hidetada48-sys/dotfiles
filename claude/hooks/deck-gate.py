@@ -1,25 +1,34 @@
 # -*- coding: utf-8 -*-
-"""説明資料の書き込みの前の確認（PreToolUse・2026-10-19 専務承認）。
+"""スライド資料・エクセルの書き込みの前の確認＝クオリティ診断（PreToolUse・2026-10-19 承認・2026-10-21 クオリティ診断を足した）。
+
+クオリティ診断（2026-10-21 専務承認）：
+  スライド資料・エクセルを新しく作る・直すときは、私が「クオリティ診断」で ①体裁だけ（A）か ②体裁と中身（A＋B）かを伺い、
+  専務のお答えがあるまで書き込みを止める。お答えは対象ごとに mino-sakura-hq の .deck_stamps/診断/ に控え、
+  採点（tools/check_deck.py）・エクセルの受付・ページ作りがその控えで①か②か・対象かを見分ける。
+  妥協の合格印（check_deck.py --accept）は、理由と妥協案のレポートのあとに専務の承認の言葉が無ければ止める。
+  エクセルを作るプログラムは、新しく書くときも直すときも対象（定例の作り直し＝プログラムを流すだけは対象外）。
+
 
 何のためか：
   説明資料（スライド形式）を一発目から見本（抄紙日報の評価と要因）の水準で作るため、
   作り始める前の手順を機械で守らせる（正典＝mino-sakura-hq の docs/説明資料の物差し.md）。
   10/19 の塩化アルミの説明資料は見本も物差しも読まずに作り、4回やり直して約6時間40分かかった。
 
-止める条件（説明資料の書き込みのとき）：
+止める条件（スライド資料の書き込みのとき）：
+  0. クオリティ診断（①か②）を伺っていない、または専務のお答えが無い（2026-10-21）
   1. この会話で見本（2026-10-17_抄紙日報の評価と要因_説明資料_見本.md）を読んでいない
   2. この会話で説明資料の手順書（setsumei-shiryo スキル）を使っていない
   3. 新しく作るとき：私が「事前の見立て」をお出ししたあとに、専務の了承の言葉が無い
      （了承・承認・進めて・お願いします・OK など。既にある説明資料の手直しは 1・2 だけを見る）
 対象：
   - Edit / Write / MultiEdit で、名前に「説明資料」を含みスライドの形（<section）の md
-    （日付が 2026-10-20 より前の資料＝承認の日より前にお出しした物は対象外）
+    （2026-10-21 から日付で外さない＝過去の資料も直すときは対象。名前に「スライド資料」を含む物も対象）
   - Bash で、中身に「説明資料」と「<section」を含む python のプログラムを動かす（資料を作るプログラム）
 エクセル（2026-10-20 専務承認・物差しをエクセルへ広げる）：
   - Edit / Write / MultiEdit で、エクセルを作る python のプログラム（中身に openpyxl と .xlsx を含む）を
-    新しく書くとき、または物差しの文書の「対象のエクセル」の表に載ったプログラムを直すとき
-  - 止める条件＝上の 1・2 に加え、この会話でエクセルの見本（原料仕入分析）の画像を見ていない。新しく書くときは 3 も
-  - 今あって表に無いプログラム（定例業務の作り直しなど）は止めない
+    新しく書くとき・直すとき（2026-10-21 クオリティ診断で、直すときも対象にした）
+  - 止める条件＝上の 0・1・2 に加え、この会話でエクセルの見本（原料仕入分析）の画像を見ていない。新しく書くときは 3 も
+  - 定例業務の作り直し（プログラムを流すだけ）は止めない
 止めたら exit 2 で理由を私に返し（専務の画面には出ない）、記録（~/.claude/logs/deck-gate.log）に残す。
 """
 import datetime as dt
@@ -47,10 +56,9 @@ def norm(p):
 
 def is_deck_name(path):
     name = os.path.basename(norm(path))
-    if "説明資料" not in name or not name.endswith(".md"):
+    if ("説明資料" not in name and "スライド資料" not in name) or not name.endswith(".md"):
         return False
-    m = re.match(r"(\d{4}-\d{2}-\d{2})_", name)
-    return not (m and m.group(1) < START)
+    return True   # 2026-10-21 クオリティ診断：過去の資料も直すときは対象（日付で外さない）
 
 
 def read(path):
@@ -68,25 +76,6 @@ def full(w, cwd):
     return w
 
 
-def registered_programs(start):
-    """物差しの文書の「対象のエクセル」の表に載った作るプログラム（ファイル名）"""
-    d = norm(start)
-    for _ in range(8):
-        f = d.rstrip("/") + "/docs/説明資料の物差し.md"
-        if os.path.isfile(f):
-            t = read(f).split("## 対象のエクセル", 1)
-            if len(t) < 2:
-                return set()
-            out = set()
-            for line in t[1].split(chr(10) + "## ")[0].splitlines():
-                cells = [c.strip().strip("`") for c in line.strip().strip("|").split("|")]
-                if len(cells) >= 2 and cells[1].endswith(".py"):
-                    out.add(os.path.basename(cells[1]))
-            return out
-        d = os.path.dirname(d.rstrip("/"))
-    return set()
-
-
 def excel_target(tool, inp, cwd):
     """エクセルを作るプログラムの書き込みなら (説明, 新しく作るか, "excel")"""
     p = inp.get("file_path") or ""
@@ -98,7 +87,8 @@ def excel_target(tool, inp, cwd):
     src = body + (read(p) if exists else "")
     if "openpyxl" not in src or ".xlsx" not in src:
         return None
-    if exists and os.path.basename(p) not in registered_programs(os.path.dirname(norm(p)) or cwd):
+    root = repo_root(os.path.dirname(norm(p)) or cwd)   # クオリティ診断を持つリポジトリ（mino-sakura-hq）のプログラムだけ
+    if not root or not os.path.isfile(root + "/tools/check_deck.py"):
         return None
     return (f"エクセルを作るプログラム {os.path.basename(norm(p))} の書き込み", not exists, "excel")
 
@@ -121,8 +111,8 @@ def target(tool, inp, cwd):
             if os.path.basename(w) in EXEMPT_PY:
                 continue
             src = read(full(w, cwd))
-            if "説明資料" in src and "<section" in src:
-                return (f"説明資料を作るプログラム {os.path.basename(w)} の実行", False, "deck")
+            if ("説明資料" in src or "スライド資料" in src) and "<section" in src:
+                return (f"スライド資料を作るプログラム {os.path.basename(w)} の実行", False, "deck")
     return None
 
 
@@ -197,12 +187,89 @@ def user_text(e):
     return t or None
 
 
-def agreed_after_plan(evs):
-    """私が「事前の見立て」をお出ししたあとに、専務の了承の言葉があるか"""
+def repo_root(start):
+    """そのファイル（またはフォルダ）が入っているリポジトリの一番上（.git のある所）。無ければ "" """
+    d = norm(start)
+    for _ in range(12):
+        if d and os.path.isdir(d.rstrip("/") + "/.git"):
+            return d.rstrip("/")
+        nd = os.path.dirname(d.rstrip("/"))
+        if not nd or nd == d:
+            break
+        d = nd
+    return ""
+
+
+def rel_in(root, path):
+    p = norm(path)
+    return p[len(root) + 1:] if root and p.startswith(root + "/") else p
+
+
+def excel_names(src):
+    """作るプログラムに書かれたエクセルの名前（{…} は * に置き換える）＝受付がそのエクセルを対象と見分けるために控える"""
+    out = []
+    for m in re.findall(r"[\"']([^\"'\n]*?\.xlsx)[\"']", src):
+        n = re.sub(r"\{[^}]*\}", "*", os.path.basename(norm(m)))
+        if n and n != ".xlsx" and n not in out:
+            out.append(n)
+    return out
+
+
+def deck_md_in(src):
+    """スライド資料を作るプログラムに書かれた md の相対パス（最初の1つ）"""
+    found = [norm(m) for m in re.findall(r"[\"']([^\"'\n]*(?:説明資料|スライド資料)[^\"'\n]*\.md)[\"']", src)
+             if "見本" not in m]   # 見た目の決まりを読む見本は除く（書き出す先の md を選ぶ）
+    return found[0] if found else ""
+
+
+def diagnosis(evs):
+    """私が「クオリティ診断」を伺ったあとの、専務の ①② のお答え。(①|②|"", 専務の言葉)"""
     last = -1
     for i, e in enumerate(evs):
         if e.get("type") == "assistant" and any(
-                b.get("type") == "text" and "事前の見立て" in b.get("text", "") for b in blocks(e)):
+                b.get("type") == "text" and "クオリティ診断" in b.get("text", "") for b in blocks(e)):
+            last = i
+    if last < 0:
+        return "", ""
+    for e in evs[last + 1:]:
+        t = user_text(e)
+        if not t:
+            continue
+        hits = [(t.find(k), v) for k, v in (("①", "①"), ("体裁だけ", "①"), ("②", "②"), ("体裁と中身", "②"),
+                                            ("A＋B", "②"), ("A+B", "②")) if k in t]
+        if hits:
+            return min(hits)[1], t.strip()[:80]
+    return "", ""
+
+
+def save_record(root, key, kind, mode, said, src):
+    """クオリティ診断の控え（mino-sakura-hq の .deck_stamps/診断/）。同じ診断なら不合格の回数を引き継ぐ"""
+    if not root or not os.path.isfile(root + "/tools/check_deck.py"):
+        return
+    d = root + "/.deck_stamps/診断"
+    os.makedirs(d, exist_ok=True)
+    f = d + "/" + key.replace("/", "__") + ".json"
+    old = {}
+    try:
+        old = json.loads(read(f) or "{}")
+    except ValueError:
+        pass
+    rec = {"対象": key, "種類": kind, "診断": mode, "専務のお答え": said,
+           "日時": f"{dt.datetime.now():%Y-%m-%d %H:%M}",
+           "不合格の回数": old.get("不合格の回数", 0) if old.get("診断") == mode else 0}
+    if kind == "excel":
+        rec["名前"] = sorted(set(old.get("名前", [])) | set(excel_names(src)))
+        rec["エクセル"] = old.get("エクセル", [])
+    with open(f, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(rec, ensure_ascii=False, indent=1) + "\n")
+
+
+def agreed_after(evs, word):
+    """私が word を含む文をお出ししたあとに、専務の承認の言葉があるか"""
+    last = -1
+    for i, e in enumerate(evs):
+        if e.get("type") == "assistant" and any(
+                b.get("type") == "text" and word in b.get("text", "") for b in blocks(e)):
             last = i
     if last < 0:
         return False
@@ -211,6 +278,11 @@ def agreed_after_plan(evs):
         if t and APPROVE.search(NOT_APPROVE.sub("", t)):
             return True
     return False
+
+
+def agreed_after_plan(evs):
+    """私が「事前の見立て」をお出ししたあとに、専務の了承の言葉があるか"""
+    return agreed_after(evs, "事前の見立て")
 
 
 def log(msg):
@@ -228,29 +300,61 @@ def main():
         data = json.load(sys.stdin)
     except Exception:
         return 0
-    hit = target(data.get("tool_name", ""), data.get("tool_input") or {}, norm(data.get("cwd", "")))
+    tool, inp, cwd = data.get("tool_name", ""), data.get("tool_input") or {}, norm(data.get("cwd", ""))
+    evs = None
+    # 妥協の合格印は、理由と妥協案のレポートをお出ししたあとの専務の承認の言葉が無ければ止める
+    if tool == "Bash" and re.search(r"python3?(\.exe)?\s+\S*check_deck\.py\s+--accept\b", inp.get("command", "")):
+        evs = events(data.get("transcript_path", ""))
+        if not agreed_after(evs, "妥協"):
+            log("止めた\t妥協の合格印\t専務の承認が無い")
+            sys.stderr.write("[クオリティ診断] 妥協の合格印を止めました。理由と妥協案のレポートをお出しし、"
+                             "専務の承認の言葉をいただいてから付けてください。\n")
+            return 2
+        log("通した\t妥協の合格印")
+        return 0
+    hit = target(tool, inp, cwd)
     if not hit:
         return 0
     what, is_new, kind = hit
-    evs = events(data.get("transcript_path", ""))
+    evs = evs or events(data.get("transcript_path", ""))
     lack = []
+    mode, said = diagnosis(evs)
+    if not mode:
+        lack.append("クオリティ診断（①体裁だけ＝A／②体裁と中身＝A＋B）を専務に伺っていない、またはお答えが無い")
     if not read_sample(evs):
         lack.append("見本（production/やりとり/2026-10-17_抄紙日報の評価と要因_説明資料_見本.md）をこの会話で読んでいない")
     if kind == "excel" and not saw_excel_sample(evs):
         lack.append("エクセルの見本（原料仕入分析）の画像をこの会話で見ていない（tools/check_excel.py で書き出した excel_check/原料仕入分析/ の画像）")
     if not used_skill(evs):
-        lack.append("説明資料の手順書（setsumei-shiryo スキル）をこの会話で使っていない")
+        lack.append("スライド資料・エクセルの手順書（setsumei-shiryo スキル）をこの会話で使っていない")
     if is_new and not agreed_after_plan(evs):
         lack.append("「事前の見立て」をお出ししたあとの専務の了承が無い")
     if not lack:
-        log(f"通した\t{what}")
+        # 診断の控えを付ける（採点・受付・ページ作りがこれで①か②かと対象かを見分ける）
+        try:
+            if tool == "Bash":
+                cmd = norm(inp.get("command", ""))
+                prog = next((full(w, cwd) for w in re.findall(r"[^\s\"'<>|;&]+\.py", cmd)
+                             if os.path.basename(w) not in EXEMPT_PY), "")
+                root = repo_root(os.path.dirname(prog) or cwd)
+                md = deck_md_in(read(prog))
+                if md:
+                    save_record(root, rel_in(root, md if re.match(r"^([A-Za-z]:)?/", md) else root + "/" + md), "deck", mode, said, "")
+            else:
+                p = full(inp.get("file_path", ""), cwd)
+                root = repo_root(os.path.dirname(p))
+                src = (inp.get("content") or "") + (inp.get("new_string") or "") + read(p)
+                save_record(root, rel_in(root, p), kind, mode, said, src)
+        except Exception as ex:
+            log(f"控えを付けられなかった\t{what}\t{type(ex).__name__}")
+        log(f"通した\t{what}\t診断{mode}")
         return 0
     log(f"止めた\t{what}\t{'／'.join(lack)}")
     sys.stderr.write(
-        f"[説明資料の確認] {what} を止めました。\n"
+        f"[クオリティ診断] {what} を止めました。\n"
         + "".join(f"  ・{x}\n" for x in lack)
-        + "手順書（setsumei-shiryo）を使い、見本と物差し（docs/説明資料の物差し.md）を読み、"
-          "事前の見立てをお出しして了承をいただいてから作ってください。\n")
+        + "手順書（setsumei-shiryo）を使い、クオリティ診断で①か②を専務に伺い、見本と物差し（docs/説明資料の物差し.md）を読み、"
+          "新しく作るときは事前の見立てをお出しして了承をいただいてから作ってください。\n")
     return 2
 
 
