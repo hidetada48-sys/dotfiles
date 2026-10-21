@@ -62,6 +62,7 @@ FOUND=$(find "$MEM_DIR" -name '*.md' -newermt "@$THRESHOLD" -print -quit 2>/dev/
 
 MSG="[保存3点セット] ③記憶が未実施です。今日のコミット（${LATEST_REF}）に対して basic-memory のノートが1本もありません。
 mcp__basic-memory__write_note で今日の作業を保存してください（専務に「記憶しますか？」と聞かず実行する）。
+出し済みの回答は繰り返さない。保存のあとは何も書かないか、した事を1行だけ書く（2026-10-21 控え帳）。
 ※この関門は ~/.claude/scripts/memory-gate.sh（past_mistakes M-014）"
 
 # SessionStart は耳打ちのみ（会話を止めない）
