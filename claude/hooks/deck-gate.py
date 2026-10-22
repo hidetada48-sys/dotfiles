@@ -223,7 +223,12 @@ def deck_md_in(src):
 
 
 def diagnosis(evs):
-    """私が「クオリティ診断」を伺ったあとの、専務の ①② のお答え。(①|②|"", 専務の言葉)"""
+    """私が「クオリティ診断」を伺ったあとの、専務の ①② のお答え。(①|②|なし|"", 専務の言葉)
+    専務が「診断はあてずに」「診断なし」と言われた会話は「なし」＝止めず、控えも付けない（2026-10-22 専務指示）"""
+    for e in evs:
+        t = user_text(e)
+        if t and re.search(r"(クオリティ)?診断(は|を)?(あてず|当てず|あてない|当てない|なし|無し|不要)", t):
+            return "なし", t.strip()[:80]
     last = -1
     for i, e in enumerate(evs):
         if e.get("type") == "assistant" and any(
@@ -319,6 +324,10 @@ def main():
     evs = evs or events(data.get("transcript_path", ""))
     lack = []
     mode, said = diagnosis(evs)
+    if mode == "なし":
+        # 専務が診断をあてないと言われた＝止めない・控えも付けない（受付も採点も求めない）
+        log(f"通した\t{what}\t診断なし（{said}）")
+        return 0
     if not mode:
         lack.append("クオリティ診断（①体裁だけ＝A／②体裁と中身＝A＋B）を専務に伺っていない、またはお答えが無い")
     if not read_sample(evs):

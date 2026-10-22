@@ -46,8 +46,9 @@ END_M=$((10#${TARGET#*-}))
 START_M=$((END_M - 1)); [ "$START_M" -eq 0 ] && START_M=12
 
 # --- 済／未の判定（2段階・ファイル有無） ---
-# 段階①：得意先別の月次レポート(xlsx)が1つでも在るか（＝生データ取込・分析が済んだ印）
-XLSX=$(find sales/reports -name "*_月次レポート_${TARGET}.xlsx" 2>/dev/null | head -1)
+# 段階①：売上明細台帳に対象月の明細が入っているか（＝業務DBからの取込が済んだ印）
+#   2026-10-22 から得意先別は1冊の販売分析（毎月上書き）になり、ファイル名に月が入らないため台帳で見る
+XLSX=$(grep -l ",${TARGET}," sales/master/売上明細台帳_*.csv 2>/dev/null | head -1)
 # 段階②：全社横断の月次分析サマリー(HTML)が在るか（＝月次フローの仕上げが済んだ印）
 SUMMARY=$(find sales/reports -name "月次分析サマリー_${TARGET}.html" 2>/dev/null | head -1)
 
@@ -63,7 +64,7 @@ if [ -z "$XLSX" ]; then
   echo "  → 業務DBから取得して整理します（承認のうえ fetch_db_sales.py → build_master → build_report）。"
 else
   # 段階②未：xlsxは作成済みだが、全社横断の月次分析サマリーHTMLがまだ
-  echo "  得意先別の月次レポート(xlsx)は作成済みですが、"
+  echo "  得意先別の売上は取り込み済みですが、"
   echo "  月次分析サマリー（全社横断1枚HTML）が未作成です。"
   echo "  → 月次フローの仕上げ（サマリーHTML作成）が残っています。"
 fi
