@@ -12,6 +12,7 @@ Stopフックの HTML関門（~/.claude/scripts/html-gate.py）は、回答を�
   OK なら exit 0、NG なら exit 1（行数・文字数と直し方を表示）
 """
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -499,11 +500,30 @@ def plain_issues(msg, inventory="", check_answer=True):
     return issues, ""
 
 
+def note_plain_failed(why):
+    """★2026-10-22 専務承認（控え帳2の直し方4）：点検のAIが動かなかったことを、次の指示のときに私に届く記録へ書く。
+    10/21 は Windows でログインが切れたまま、注意を出して通すだけだったため、丸1日気づかなかった"""
+    import datetime
+    pending = Path(os.environ.get("HTML_GATE_STATE_DIR") or Path.home() / ".claude/state") / "html-gate_pending.log"
+    rec = "\t".join([datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                     f"点検のAIが動かなかった（{why[:60]}）。ログイン切れなら Bash で claude auth status を確かめ、専務に入り直しを伺う",
+                     ""]) + "\n"
+    try:
+        pending.parent.mkdir(parents=True, exist_ok=True)
+        old = pending.read_text(encoding="utf-8") if pending.exists() else ""
+        if "点検のAIが動かなかった" not in old:   # 同じ知らせは1件だけ（下書きを測るたびに重ねない）
+            with open(pending, "a", encoding="utf-8") as f:
+                f.write(rec)
+    except Exception:
+        pass
+
+
 def stop_on_plain(msg, inventory="", check_answer=True):
     """答え切っていない・伝わらない文が1つでもあれば NG。点検できないときは知らせて通す"""
     issues, why = plain_issues(msg, inventory, check_answer)
     if why:
         print(f"注意：分かる日本語の点検ができませんでした（{why}）。出す前に、専務の立場で1文ずつ読み直すこと")
+        note_plain_failed(why)
         return False
     if not issues:
         return False

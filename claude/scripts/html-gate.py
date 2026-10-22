@@ -220,6 +220,44 @@ def exempt_kind(msg, last_user, prompt):
     return ""
 
 
+# ★2026-10-22 専務承認（控え帳2「独自の言葉」の直し方3）：種類Bの短い返答は出す前の点検をしないため、
+#   専務に通じない言葉の一覧（jargon_words.txt）にも掛かっていなかった（10/21「定期で作る物」が素通り）。
+#   種類Bにだけ一覧を掛け、当たれば違反として記録する（AIは使わない＝待ち時間なし。止めはしない）。
+JARGON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jargon_words.txt")
+STATE_DIR = os.environ.get("HTML_GATE_STATE_DIR") or os.path.join(os.path.expanduser("~"), ".claude", "state")
+
+
+def jargon_hits(msg):
+    """一覧の言葉が、言い換え（＝）の無い行に出ていれば その言葉の並びを返す（precheck-answer.py と同じ見方）"""
+    try:
+        with open(JARGON, encoding="utf-8") as f:
+            words = [w.strip() for w in f if w.strip() and not w.lstrip().startswith("#")]
+    except Exception:
+        return []
+    hits = []
+    for line in msg.splitlines():
+        if "＝" in line:
+            continue
+        body = re.sub(r"\(https?://[^)]*\)|`[^`]*`", "", line)   # URL とファイル名（`…`）は見ない
+        hits += [w for w in words if w in body and w not in hits]
+    return hits
+
+
+def record_jargon(msg, hits):
+    """短い返答に一覧の言葉が出たことを、次の指示で届く記録と、消さない記録の両方に書く"""
+    import datetime
+    rec = "\t".join([datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                     "短い返答に専務に通じない言葉（" + "・".join(hits) + "）。言い換えるか「＝○○のこと」を添える",
+                     msg.replace("\n", " ")[:60]]) + "\n"
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        for name in ("html-gate_pending.log", "html-gate_violations.log"):
+            with open(os.path.join(STATE_DIR, name), "a", encoding="utf-8") as f:
+                f.write(rec)
+    except Exception:
+        pass
+
+
 def main():
     try:
         d = json.loads(sys.stdin.buffer.read().decode("utf-8", "replace"))   # UTF-8で読む（既定のcp932だと日本語が約1.65倍に数えられ、短い回答まで止めていた 2026-09-18）
@@ -240,7 +278,12 @@ def main():
     key = str(d.get("prompt_id") or d.get("session_id") or "nokey")[:64]
     if any(kw in lu for kw in SKIP_WORDS):
         out("skip")
-    if exempt_kind(msg, lu, prompt):   # 測らなくてよい返答（2026-10-20 専務決定）は何も記録しない
+    kind = exempt_kind(msg, lu, prompt)
+    if kind:   # 測らなくてよい返答（2026-10-20 専務決定）は長さを記録しない
+        hits = jargon_hits(msg) if kind == "B短い" else []
+        if hits:   # 種類Bだけ、一覧の言葉は記録する（2026-10-22）
+            record_jargon(msg, hits)
+            out("skip", "J")   # 止めない。2列目の J は試験で見分けるための印
         out("skip")
     # ★2026-10-05 専務指示：リンクの有無で基準を分けない。
     #   旧＝リンク付きの返答だけ「URLを除き3行・120字」。120字では中身が書けず、分かる日本語の点検に落ち続けた
