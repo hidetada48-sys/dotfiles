@@ -227,7 +227,7 @@ def diagnosis(evs):
     専務が「診断はあてずに」「診断なし」と言われた会話は「なし」＝止めず、控えも付けない（2026-10-22 専務指示）"""
     for e in evs:
         t = user_text(e)
-        if t and re.search(r"(クオリティ)?診断(は|を)?(あてず|当てず|あてない|当てない|なし|無し|不要)", t):
+        if t and re.search(r"(クオリティ)?診断(は|を)?(あてず|当てず|あてない|当てない|なし|無し|不要|いらない|要らない)", t):
             return "なし", t.strip()[:80]
     last = -1
     for i, e in enumerate(evs):
