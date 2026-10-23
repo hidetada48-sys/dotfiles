@@ -4,10 +4,12 @@
 #   成果物は「HTML＋クリックできるURL」。mdで止めたらチャット直書きと同じ＝ゼロ点。
 # ★2026-10-05 専務承認：返答が専務のお尋ねに答え切っているかを precheck-answer.py が点検するため、
 #   直近のお尋ねを控えておく（python が無い環境では控えない＝点検は質問なしで行う）
-PY=$(command -v python3 || command -v python)
-if [ -n "$PY" ]; then
+# ★2026-10-23 専務承認：Windows の python3 は Microsoft Store への案内（偽物）で、控えが一度も書けていなかった。
+#   実際に動く python を選ぶ共通の入口（run-python.sh）から呼ぶ。
+RUNPY="$HOME/.claude/hooks/run-python.sh"
+if [ -f "$RUNPY" ]; then
     mkdir -p "$HOME/.claude/state" 2>/dev/null
-    "$PY" -c 'import sys,json,os
+    bash "$RUNPY" -c 'import sys,json,os
 try:
     d=json.loads(sys.stdin.buffer.read().decode("utf-8","replace"))
     t=d.get("prompt") or ""
