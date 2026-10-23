@@ -365,6 +365,26 @@ def stop_on_no_ask(inv):
     return True
 
 
+FIG_WORD = __import__("re").compile(r"図|グラフ|チャート|ページ|枚目|[pｐPＰ]\s*\d|\d\s*[pｐPＰ]|点|線|軸|色|曲線|ドット|帯|ひげ")
+HOW_WORD = __import__("re").compile(r"意味|読み方|見方|求め方|出し方|計算|何が見える|なにが見える|何がわかる|どう見る|どうやって|どう求め|見えない|とは|何を表|何か|のことか|か[。？?]?\s*$")
+
+
+def stop_on_figure_question(inv):
+    """お尋ねが資料の図・数字の意味・読み方・求め方なら、文字のレポートを作らずに止める（2026-10-23 専務承認）。
+    10/23 見本9ページの「大きい点の意味・平均と95%の範囲の求め方」を文字の箇条書きで答え、
+    「さぼるな　文字ばかりで読む気になれない　またさぼった」と叱責された（10/8 にも同じ叱責）。
+    答えは「抄紙日報の見本 4・7・8・11枚目の読み方」と同じ形のスライド（setsumei-shiryo）で作る"""
+    m = __import__("re").search(r"^\s*お尋ね\s*[：:](.*)$", inv or "", __import__("re").M)
+    ask = m.group(1) if m else ""
+    if not (FIG_WORD.search(ask) and HOW_WORD.search(ask)):
+        return False
+    print("NG：お尋ねが資料の図・数字の意味・読み方・求め方なので、文字のレポートでは答えない。")
+    print("  setsumei-shiryo の手順で「読み方」のスライドを作って答える（見本＝production/やりとり/2026-10-17_抄紙日報の見本_4・7・8・11枚目の読み方.md）：")
+    print("  1ページ目＝お尋ねごとの答えの表／次から＝実際の1件の例を図に置き、式の箱で計算を見せる／巻末＝用語")
+    print("  資料の先頭に <!-- 元の資料：<尋ねられた資料の md> --> を書く（既にある資料へのお尋ね＝クオリティ診断なし・元のクオリティのまま）")
+    return True
+
+
 JARGON = Path(__file__).with_name("jargon_words.txt")
 
 
@@ -580,6 +600,8 @@ if __name__ == "__main__":
         if (sys.argv[4] if len(sys.argv) >= 5 else None) not in PLACES:
             print("NG：レポートの置き場が指定されていない（または一覧に無い）。")
             print(PLACE_HELP)
+            sys.exit(1)
+        if stop_on_figure_question(inv):                  # 図・数字の意味のお尋ねは図のスライドで答える（2026-10-23 専務承認）
             sys.exit(1)
         # 案ごとの5つの見出しは AI を使わずに数える（待ち時間なし・2026-10-17 専務承認）。
         # レポート全体の「お尋ねに答え切っているか」の AI の点検は、待ち時間が増えるため加えない（同日 専務指示）

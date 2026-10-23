@@ -29,6 +29,10 @@
     新しく書くとき・直すとき（2026-10-21 クオリティ診断で、直すときも対象にした）
   - 止める条件＝上の 0・1・2 に加え、この会話でエクセルの見本（原料仕入分析）の画像を見ていない。新しく書くときは 3 も
   - 定例業務の作り直し（プログラムを流すだけ）は止めない
+既にある物の直し・お尋ねの答え（2026-10-23 専務承認）：
+  - 既にある資料の md・エクセルを作る既にあるプログラムの直し、書き出す先の資料が既にあるプログラムの実行（"修正"）と、
+    中身に「元の資料：<既にある md>」と書いた資料・プログラム（"派生"＝既にある資料へのお尋ねに答える資料）は、
+    クオリティ診断・見本・事前の見立てを求めず、元の資料のクオリティのまま作る。手順書を使ったかだけ見る。控えも付けない
 止めたら exit 2 で理由を私に返し（専務の画面には出ない）、記録（~/.claude/logs/deck-gate.log）に残す。
 """
 import datetime as dt
@@ -93,26 +97,53 @@ def excel_target(tool, inp, cwd):
     return (f"エクセルを作るプログラム {os.path.basename(norm(p))} の書き込み", not exists, "excel")
 
 
+def derived_from(src, start):
+    """既にある資料へのお尋ねに答える資料か＝中身に「元の資料：<既にある md>」の印があり、その md が実在する（2026-10-23 専務承認）"""
+    m = re.search(r"元の資料：\s*([^\s<>\"']+\.md)", src or "")
+    if not m:
+        return ""
+    p = norm(m.group(1))
+    root = repo_root(start) or repo_root(os.getcwd())
+    for c in (p, (root + "/" + p) if root else ""):
+        if c and os.path.isfile(c):
+            return p
+    return ""
+
+
 def target(tool, inp, cwd):
-    """対象なら (説明, 新しく作るか, 種類) を返す。対象外なら None"""
+    """対象なら (説明, 新しく作るか, 種類, 修正か派生か) を返す。対象外なら None
+    修正か派生か＝既にある資料・プログラムを直す（"修正"）、または既にある資料へのお尋ねに答える資料を作る（"派生"＝「元の資料：」の印）。
+    この2つは元の資料のクオリティのまま作ればよいので、クオリティ診断と事前の見立てを求めない（2026-10-23 専務承認
+    「すでにある物に対する質問や修正は元のクオリティのまま作ればいいに決まっている　クオリティ診断に対するルールを変えろ」）"""
     if tool in ("Edit", "Write", "MultiEdit"):
         p = inp.get("file_path") or ""
         if not is_deck_name(p):
-            return excel_target(tool, inp, cwd)
+            hit = excel_target(tool, inp, cwd)
+            return hit + ("" if hit[1] else "修正",) if hit else None
         exists = os.path.isfile(p)
         body = (inp.get("content") or "") + (inp.get("new_string") or "") + "".join(
             e.get("new_string", "") for e in inp.get("edits") or [] if isinstance(e, dict))
         if "<section" not in body and "<section" not in (read(p) if exists else ""):
             return None
-        return (f"{os.path.basename(norm(p))} の書き込み", not exists, "deck")
+        fix = "修正" if exists else ("派生" if derived_from(body, os.path.dirname(norm(p)) or cwd) else "")
+        return (f"{os.path.basename(norm(p))} の書き込み", not exists, "deck", fix)
     if tool == "Bash":
         cmd = norm(inp.get("command", ""))
         for w in re.findall(r"[^\s\"'<>|;&]+\.py", cmd):
             if os.path.basename(w) in EXEMPT_PY:
                 continue
-            src = read(full(w, cwd))
+            prog = full(w, cwd)
+            src = read(prog)
             if ("説明資料" in src or "スライド資料" in src) and "<section" in src:
-                return (f"スライド資料を作るプログラム {os.path.basename(w)} の実行", False, "deck")
+                fix = ""
+                if derived_from(src, os.path.dirname(prog) or cwd):
+                    fix = "派生"
+                else:
+                    md = deck_md_in(src)
+                    root = repo_root(os.path.dirname(prog)) or repo_root(cwd)   # 一時フォルダのプログラムは作業中のリポジトリで見る
+                    if md and root and os.path.isfile(md if re.match(r"^([A-Za-z]:)?/", md) else root + "/" + md):
+                        fix = "修正"   # 書き出す先の資料が既にある＝作り直し・直し
+                return (f"スライド資料を作るプログラム {os.path.basename(w)} の実行", False, "deck", fix)
     return None
 
 
@@ -320,8 +351,18 @@ def main():
     hit = target(tool, inp, cwd)
     if not hit:
         return 0
-    what, is_new, kind = hit
+    what, is_new, kind, fix = hit
     evs = evs or events(data.get("transcript_path", ""))
+    if fix:
+        # 既にある物の直し・既にある資料へのお尋ねの答え＝元のクオリティのまま作る。診断・見本・見立てを求めず、控えも付けない
+        # （控えが無い＝採点・受付・ページ作りの対象外＝いつでも開ける）。手順書（図で答える形）を使ったかだけ見る
+        if not used_skill(evs):
+            log(f"止めた\t{what}\t{fix}・手順書を使っていない")
+            sys.stderr.write(f"[クオリティ診断] {what} を止めました（{fix}＝診断は不要）。\n"
+                             "  ・スライド資料・エクセルの手順書（setsumei-shiryo スキル）をこの会話で使っていない\n")
+            return 2
+        log(f"通した\t{what}\t{fix}（診断なし・元のクオリティのまま）")
+        return 0
     lack = []
     mode, said = diagnosis(evs)
     if mode == "なし":
