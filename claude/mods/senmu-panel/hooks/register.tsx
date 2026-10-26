@@ -1,5 +1,5 @@
 // 専務の操作盤
-// ・入力欄の上：その日の最初の起動なら取り込みの結果の1行と、〔保存3点〕〔横で質問〕〔控え帳〕（いつも出す）
+// ・入力欄の上：その日の最初の起動なら取り込みの結果の1行と、〔保存3点〕〔横で質問〕〔控え帳〕と考える強さの〔中〕〔高〕〔超高〕（いつも出す）
 // ・右側の窓（/panel で開く）：〔未決事項〕〔横で質問〕〔控え帳〕を切り替えて表示
 // ・1日1回、その日の最初の起動で、全リポジトリに最新を自動で取り込む
 //   ★2026-10-13 専務指摘：〔最新を取り込む〕ボタンは最初の依頼を送ったあと（作業中）にしか出ず、
@@ -9,7 +9,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { NoteItem, Pending, Tab } from '../types'
+import type { EffortPick, NoteItem, Pending, Tab } from '../types'
 
 const PLUGIN = 'senmu-panel'
 const PANE = 'senmu-panel'
@@ -29,9 +29,21 @@ const sideAnswer = atom({ plugin: 'senmu-panel', key: 'sideAnswer' } as const, '
 const isSideBusy = atom({ plugin: 'senmu-panel', key: 'isSideBusy' } as const, false)
 // 控え帳の入力欄の番号。書くたびに1つ増やして新しい欄に替え、書いた文を消す（2026-10-13 専務指摘「書いたものが消えない」）
 const noteInputNo = atom({ plugin: 'senmu-panel', key: 'noteInputNo' } as const, 0)
+// 考える強さのボタンで選んだ強さ（空＝選んでいない＝/effort の強さのまま）
+// ★2026-10-26 専務承認：押した強さを、次にボタンで変えるまで続ける（会話を開き直しても続ける）。
+//   選んでいるボタンをもう一度押すと選択を外し、/effort の強さに戻す
+const effortPick = atom({ plugin: 'senmu-panel', key: 'effortPick' } as const, '' as EffortPick)
 
 // PCをまたいで残す値の置き場（そのPCの中）
 const STORE_PENDING = 'pending'
+const STORE_EFFORT = 'effortPick'
+
+// 考える強さのボタン（左から順に並べる）
+const EFFORTS: { key: Exclude<EffortPick, ''>; label: string }[] = [
+  { key: 'medium', label: '中' },
+  { key: 'high', label: '高' },
+  { key: 'xhigh', label: '超高' },
+]
 
 // 伺いで終わった返答かどうか（最後の行の終わり方で見る）
 const ASK_END = /(でしょうか|ませんか|ますか|しますか|ください|か)[。？?！!）)]*$/
@@ -268,10 +280,24 @@ async function openTab($: Dollar, t: Tab): Promise<void> {
   await $.ui.open({ id: PANE, title: TITLE, focus: true })
 }
 
+// 考える強さのボタンを押したとき：選び直し、または同じボタンで選択を外す。会話をまたいで残す
+async function pickEffort($: Dollar, key: Exclude<EffortPick, ''>): Promise<void> {
+  const next: EffortPick = (await read($, effortPick)) === key ? '' : key
+  await update($, effortPick, () => next)
+  await $.store.set(STORE_EFFORT, next)
+}
+
 export const register: Register = on => {
   // 会話の開始：/panel を用意し、その日の最初の起動なら最新を取り込む
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'panel', description: '専務の操作盤を開く' })
+    try {
+      // 前の会話で選んだ考える強さを引き継ぐ
+      const saved = await $.store.get(STORE_EFFORT)
+      if (EFFORTS.some(x => x.key === saved)) await update($, effortPick, () => saved as EffortPick)
+    } catch {
+      // 読めなくても会話は続ける（/effort の強さで答える）
+    }
     try {
       const saved = await loadPending($)
       await update($, pending, () => saved)
@@ -311,6 +337,14 @@ export const register: Register = on => {
     return next({ ...e, context: [...(e.context ?? []), note] })
   }).catch(($, e, next) => next(e)) // 失敗しても専務の依頼は必ず通す
 
+  // 返答を作る直前：考える強さのボタンで選んだ強さに差し替える
+  //   本体の返答だけ（部下に任せた作業＝サブエージェントは触らない）。強さの設定が無いモデルには足さない
+  on('turn.step', async function* ($, e, next) {
+    const pick = e.agentId === undefined && e.effort !== undefined ? await read($, effortPick) : ''
+    if (pick === '') return yield* next(e)
+    return yield* next({ ...e, effort: pick })
+  })
+
   // 返答の終わり：伺いで終わっていれば未決事項に載せる
   on('turn.complete', async ($, e, next) => {
     try {
@@ -339,6 +373,7 @@ export const register: Register = on => {
     if (e.props.hasSurvey) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     const shown = await read($, pullShown)
+    const pick = await read($, effortPick)
 
     return (
       <Box flexDirection="column">
@@ -354,6 +389,16 @@ export const register: Register = on => {
           <Button key="save" label="保存3点" onPress={() => saveAll($)} />
           <Button key="open-ask" label="横で質問" onPress={() => openTab($, 'ask')} />
           <Button key="open-notes" label="控え帳" onPress={() => openTab($, 'notes')} />
+          {/* 考える強さ：選んでいるボタンは色が変わる */}
+          <Text>考える強さ</Text>
+          {EFFORTS.map(x => (
+            <Button
+              key={`effort-${x.key}`}
+              label={x.label}
+              variant={x.key === pick ? 'primary' : 'secondary'}
+              onPress={() => pickEffort($, x.key)}
+            />
+          ))}
         </Box>
       </Box>
     )

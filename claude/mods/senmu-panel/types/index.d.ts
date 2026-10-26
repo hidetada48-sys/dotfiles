@@ -18,6 +18,9 @@ export type NoteItem = {
 // 窓の切り替え
 export type Tab = 'pending' | 'ask' | 'notes'
 
+// 考える強さのボタンで選んだ強さ（空＝選んでいない）
+export type EffortPick = '' | 'medium' | 'high' | 'xhigh'
+
 declare module 'claude-code' {
   interface PluginState {
     'senmu-panel': {
@@ -29,6 +32,7 @@ declare module 'claude-code' {
       sideAnswer: string
       isSideBusy: boolean
       noteInputNo: number
+      effortPick: EffortPick
     }
   }
 }

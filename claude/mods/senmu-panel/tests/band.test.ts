@@ -1,5 +1,6 @@
 // 未決事項の試験：伺いで終わった返答だけが未決事項に載る
 import { expect, mock, test } from 'claude-code/testing'
+import type { TestBody } from 'claude-code/testing'
 
 const PANE = { plugin: 'senmu-panel', component: 'Pane', requestId: 'senmu-panel' } as const
 
@@ -105,7 +106,7 @@ test('控え帳についての伺いは未決事項に入れない', async ($, o
 // 起動時の取り込みの試験で使う入れ物（ファイルと git の呼び出しを試験の中だけで受ける）
 //   updates＝リポジトリごとに取り込む更新の件数／failed＝取り込みに失敗させるリポジトリ
 function mockPull(
-  on: Parameters<Parameters<typeof test>[1]>[1],
+  on: Parameters<TestBody>[1],
   opts: { updates?: Record<string, number>; failed?: string[] } = {},
 ) {
   mock.env(on, { HOME: '/h' })
@@ -226,4 +227,62 @@ test('起動時の設定のフック（定例業務の表づくり）より先�
   git.length = 0
   await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
   expect(git.length).toBe(0)
+})
+
+// 考える強さの試験で使う入れ物：モデルに送る役の代わりを置き、送った強さを控える（試験の最初に1回だけ呼ぶ）
+function mockStep(on: Parameters<TestBody>[1]) {
+  const box: { sent: unknown } = { sent: 'not-sent' }
+  on('turn.step', async function* ($, e) {
+    box.sent = e.effort
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [] } as never
+  })
+  // 返答を作る直前の呼び出しを1回流し、モデルに届いた強さを返す
+  return async (
+    $: Parameters<TestBody>[0],
+    input: { effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; agentId?: string },
+  ): Promise<unknown> => {
+    box.sent = 'not-sent'
+    const s = $.turn.step({ turnId: 't', index: 0, model: 'opus', messageCount: 1, ...input } as never)
+    for await (const _ of s) {
+      // 送った中身は見ない
+    }
+    await s.result
+    return box.sent
+  }
+}
+
+test('考える強さ：押した強さで返答を作り、同じボタンをもう一度押すと /effort の強さに戻る', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  const step = mockStep(on)
+  const ui = await $.ui.mount({ plugin: 'senmu-panel', component: 'AbovePrompt', surface: 'terminal', props: { hasSurvey: false } as never })
+  expect((await ui.find({ key: 'effort-medium' }))?.text).toBe('中')
+  expect((await ui.find({ key: 'effort-high' }))?.text).toBe('高')
+  expect((await ui.find({ key: 'effort-xhigh' }))?.text).toBe('超高')
+  // 押す前は /effort の強さのまま
+  expect(await step($, { effort: 'high' })).toBe('high')
+  // 〔超高〕を押すと、次の返答から超高で作り、続ける
+  await ui.press({ key: 'effort-xhigh' })
+  expect(await step($, { effort: 'high' })).toBe('xhigh')
+  expect(await step($, { effort: 'high' })).toBe('xhigh')
+  // 〔中〕に変えると中
+  await ui.press({ key: 'effort-medium' })
+  expect(await step($, { effort: 'high' })).toBe('medium')
+  // 部下に任せた作業（サブエージェント）と、強さの設定が無いモデルは触らない
+  expect(await step($, { effort: 'low', agentId: 'a1' })).toBe('low')
+  expect(await step($, {})).toBe(undefined)
+  // 選んでいる〔中〕をもう一度押すと選択を外し、/effort の強さに戻る
+  await ui.press({ key: 'effort-medium' })
+  expect(await step($, { effort: 'high' })).toBe('high')
+  await ui.unmount()
+})
+
+test('考える強さ：前の会話で選んだ強さを、次の会話でも続ける', async ($, on) => {
+  mock.clock(on)
+  // 前の会話で〔高〕を選んで残った状態
+  mock.store(on, { effortPick: 'high' })
+  mockPull(on)
+  const step = mockStep(on)
+  await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
+  expect(await step($, { effort: 'xhigh' })).toBe('high')
 })
