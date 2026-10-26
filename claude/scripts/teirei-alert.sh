@@ -42,6 +42,12 @@ if [ -f production/scripts/nippo_server_pull.py ]; then
   [ -n "$PULL" ] && { echo ""; echo "========== 日報の確定データ =========="; echo "$PULL"; }
 fi
 
+# クレーム登録アプリの台帳（社内サーバーの共用フォルダ）をリポジトリへコピーしてエクセルを作り直す（届かなければ何もしない・2026-10-26 専務承認）
+if [ -f clients/scripts/claim_server_pull.py ]; then
+  CLAIM=$(PYTHONIOENCODING=utf-8 "$PY" clients/scripts/claim_server_pull.py 2>/dev/null)
+  [ -n "$CLAIM" ] && { echo ""; echo "========== クレーム台帳 =========="; echo "$CLAIM"; }
+fi
+
 # .xls を読む部品（xlrd）が無ければ uv で足して流す
 if "$PY" -c 'import xlrd, openpyxl' >/dev/null 2>&1; then
   PYTHONIOENCODING=utf-8 "$PY" tools/teirei.py 2>/dev/null
