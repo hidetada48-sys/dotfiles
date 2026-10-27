@@ -191,6 +191,10 @@ async function pullFirst($: Dollar): Promise<void> {
     pullRunning = (async () => {
       // 取り込みは会話の始まり（まだ一度もやり取りしていないとき）だけ。操作盤を直して読み込み直したときはしない
       if ((await $.session.turns()) !== 0) return
+      // ★2026-10-27 専務指示「直せ」：自動の実行（claude -p＝ブックマークの週次収集など）では取り込まず、「今日は済み」の印も付けない。
+      //   10/27 18:28 にPCの起動で週次収集が動いて今日の取り込みを済ませ、帯も見えない会話に出たため、専務が開いた会話に結果が出なかった。
+      //   claude -p の実行では CLAUDE_CODE_ENTRYPOINT が sdk-cli になる（ふだんの会話は cli）
+      if ((await $.env.get('CLAUDE_CODE_ENTRYPOINT')) === 'sdk-cli') return
       try {
         await pullOncePerDay($)
       } catch (err) {

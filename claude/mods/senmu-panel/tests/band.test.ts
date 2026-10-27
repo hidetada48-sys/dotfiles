@@ -107,9 +107,9 @@ test('控え帳についての伺いは未決事項に入れない', async ($, o
 //   updates＝リポジトリごとに取り込む更新の件数／failed＝取り込みに失敗させるリポジトリ
 function mockPull(
   on: Parameters<TestBody>[1],
-  opts: { updates?: Record<string, number>; failed?: string[] } = {},
+  opts: { updates?: Record<string, number>; failed?: string[]; env?: Record<string, string> } = {},
 ) {
-  mock.env(on, { HOME: '/h' })
+  mock.env(on, { HOME: '/h', ...opts.env })
   // 会話の開始・/panel の登録・やり取りの回数（まだ0回）を試験の中で受ける
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
@@ -209,6 +209,15 @@ test('取り込みの結果は〔消す〕を押すと帯から消え、ボタ�
   expect(await ui2.find({ type: 'Text', text: /^最新の取り込み：/ })).toBeFalsy()
   expect((await ui2.find({ key: 'save' }))?.text).toBe('保存3点')
   await ui2.unmount()
+})
+
+test('自動の実行（claude -p）では取り込まず、今日は済みの印も付けない', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  const { files, git } = mockPull(on, { env: { CLAUDE_CODE_ENTRYPOINT: 'sdk-cli' } })
+  await $.session.start({ cwd: '/h/test2', surface: null, isInteractive: false })
+  expect(git.length).toBe(0)
+  expect(files.has('/h/.claude/state/senmu-pull-day.txt')).toBe(false)
 })
 
 test('起動時の設定のフック（定例業務の表づくり）より先に取り込みを済ませる', async ($, on) => {
