@@ -18,6 +18,11 @@
   「進めろ」（2026-10-17 専務承認で追加。「進めてよろしいでしょうか」への専務のお返事が止められたため）
   「直せ」（2026-10-21 専務指示「直せも承認だ」。「直せる」「直せない」「直せば」は除く）
   「直してくれ」「〜しろ」「やってくれ」だけの依頼は承認とみなさない
+会話の流れでの承認（2026-10-29 専務承認・控え帳 10/28「承認という言葉に拘り過ぎている」）：
+  私の直前の発言が伺い（「？」「よろしいですか」「ください」「いただければ」など）で終わっていれば、
+  そのお返事に受け入れる言い方（はい・いい・それで・直して・消せ・並べろ・〜にしろ など）があれば承認とみなす。
+  打ち消し（いや・違う・ではない・だめ・待て・やめ など）・問い返し（「？」で終わる・なぜ）があれば承認としない。
+  伺いの無いところでの「直してくれ」「〜しろ」だけの依頼は、今までどおり承認とみなさない（10/5 の再発防止）
 止めたら exit 2 で理由を私に返し、記録（~/.claude/logs/approval-gate.log）に残す。
 """
 import datetime as dt
@@ -51,6 +56,17 @@ APPROVE = re.compile(r"承認(する|します|です|だ|で(いい|よい|良�
                      r"|(?<![A-Za-zＡ-Ｚａ-ｚ])(?:ok|OK|Ok|ｏｋ|ＯＫ|Ｏｋ)(?![A-Za-zＡ-Ｚａ-ｚ])")   # 「ok」も承認（2026-10-06 専務指示）
 NOT_APPROVE = re.compile(r"承認を得|承認な[しく]|承認して(から|い?ない)|無承認|承認が(ない|無い)|承認しない")
 
+# 会話の流れでの承認（2026-10-29）：私の直前の発言の最後の行が伺いか
+ASK_LINE = re.compile(r"(？|\?|ですか|でしょうか|ますか|ませんか|ください|下さい|お願いします|いただければ|よろしければ)")
+# 伺いへのお返事の、受け入れる言い方
+YES = re.compile(r"はい|ええ|うん|いい|よい|良い|よし|了解|それで|その(通り|とおり)|頼む|たのむ|どうぞ|お願い|問題ない|構わない|かまわない"
+                 r"|[てで](くれ|ください|下さい|ほしい)?(?=[\s。、！!　]|$)"            # 直して・やって・進めてくれ
+                 r"|([ろせ]|(?<![そこあど])れ)(?=[\s。、！!　]|$)"                      # 並べろ・消せ・やれ（それ・これ は除く）
+                 r"|(?<!だ)[けえ](?=[\s。、！!　]|$)", re.M)                           # 書け・使え（だけ は除く）
+# 打ち消し・問い返し
+NO = re.compile(r"いや|いいえ|違う|違い|ちがう|ではな|じゃな|だめ|ダメ|駄目|待て|待って|まって|やめ|止め|ストップ|まだ"
+                r"|不要|いらな|要らな|なぜ|なんで|どうして")
+
 
 def norm(p):
     return (p or "").replace("\\", "/")
@@ -63,36 +79,65 @@ def protected(path):
     return any(k in p for k in PROTECTED) or any(r.search(p) for r in PROTECTED_RE)
 
 
-def last_user_text(transcript):
-    """専務の直前のご発言（ツールの結果や仕組みの差し込みは除く）"""
+def last_exchange(transcript):
+    """専務の直前のご発言（ツールの結果や仕組みの差し込みは除く）と、その前の私の最後の発言を返す"""
     try:
         lines = open(transcript, encoding="utf-8").read().splitlines()
     except Exception:
-        return None
+        return None, ""
+    user = None
     for line in reversed(lines):
         try:
             e = json.loads(line)
         except Exception:
             continue
+        c = (e.get("message") or {}).get("content")
+        if user is not None:
+            # ご発言より前の、私の最後の文（ツールを呼ぶだけの発言は飛ばす）
+            if e.get("type") == "assistant" and isinstance(c, list):
+                t = "".join(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
+                if t.strip():
+                    return user, t
+            elif e.get("type") == "user" and not e.get("isMeta") and user_text(c):
+                return user, ""                                   # 私の発言を挟まずに次のご発言が来た
+            continue
         if e.get("type") != "user" or e.get("isMeta"):
             continue
-        c = (e.get("message") or {}).get("content")
-        if isinstance(c, str):
-            return c
-        if isinstance(c, list):
-            if any(b.get("type") == "tool_result" for b in c if isinstance(b, dict)):
-                continue
-            t = "".join(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
-            if t:
-                return t
+        user = user_text(c)
+    return user, ""
+
+
+def user_text(c):
+    """ご発言の文（ツールの結果なら None）"""
+    if isinstance(c, str):
+        return c
+    if isinstance(c, list):
+        if any(b.get("type") == "tool_result" for b in c if isinstance(b, dict)):
+            return None
+        return "".join(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text") or None
     return None
 
 
-def approved(text):
+def asked(prev):
+    """私の発言の最後の行が伺いか（飾りの記号は外して見る）"""
+    rows = [re.sub(r"[*_`#>]", "", r).strip() for r in (prev or "").splitlines()]
+    rows = [r for r in rows if r]
+    return bool(rows) and bool(ASK_LINE.search(rows[-1]))
+
+
+def approved(text, prev=""):
     if not text:
         return False
     # 否定の言い回しを消してから、承認の言葉を探す
-    return bool(APPROVE.search(NOT_APPROVE.sub("", text)))
+    if APPROVE.search(NOT_APPROVE.sub("", text)):
+        return True
+    # 会話の流れ：私の伺いへの、受け入れるお返事（打ち消し・問い返しは除く）
+    if not asked(prev):
+        return False
+    reply = text.strip()
+    if reply.endswith(("？", "?")) or NO.search(reply):
+        return False
+    return bool(YES.search(reply))
 
 
 def full(w, cwd):
@@ -144,16 +189,16 @@ def main():
     what = target(data.get("tool_name", ""), data.get("tool_input") or {}, norm(data.get("cwd", "")))
     if not what:
         return 0
-    text = last_user_text(data.get("transcript_path", ""))
-    if approved(text):
+    text, prev = last_exchange(data.get("transcript_path", ""))
+    if approved(text, prev):
         log(f"通した\t{what}")
         return 0
     log(f"止めた\t{what}")
     sys.stderr.write(
         f"[承認の関門] {what} は、専務の承認が無いため止めました。\n"
         "何をするか（どのファイルをどう直すか・サーバーへ置くか）を専務に示し、"
-        "「承認」「進めて」「直せ」などのお返事をいただいてから実行してください。"
-        "「直してくれ」「〜しろ」などの依頼は承認ではありません。\n")
+        "伺ったあとの受け入れるお返事（承認・はい・直して・消せ・〜にしろ など）をいただいてから実行してください。"
+        "伺う前の「直してくれ」だけの依頼は承認ではありません。伺いで「承認とお返事ください」と言葉を指定しないでください。\n")
     return 2
 
 
