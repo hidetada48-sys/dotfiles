@@ -29,6 +29,9 @@ const sideAnswer = atom({ plugin: 'senmu-panel', key: 'sideAnswer' } as const, '
 const isSideBusy = atom({ plugin: 'senmu-panel', key: 'isSideBusy' } as const, false)
 // 控え帳の入力欄の番号。書くたびに1つ増やして新しい欄に替え、書いた文を消す（2026-10-13 専務指摘「書いたものが消えない」）
 const noteInputNo = atom({ plugin: 'senmu-panel', key: 'noteInputNo' } as const, 0)
+// 〔消す〕を1回押した控え帳の行の番号（空＝なし）。もう1回〔本当に消す〕を押すと消す
+// ★2026-11-03 専務承認（案1）：控え帳に書いたものをあとから消せるようにする。押し間違いで消えないよう2回押しにする
+const noteDeleteArmed = atom({ plugin: 'senmu-panel', key: 'noteDeleteArmed' } as const, '')
 // 考える強さのボタンで選んだ強さ（空＝選んでいない＝/effort の強さのまま）
 // ★2026-10-26 専務承認：押した強さを、次にボタンで変えるまで続ける（会話を開き直しても続ける）。
 //   選んでいるボタンをもう一度押すと選択を外し、/effort の強さに戻す
@@ -117,6 +120,12 @@ async function addNote($: Dollar, source: 'senmu' | 'auto', text: string, at?: s
     status: 'open',
   })
   await saveNotes($, list)
+}
+
+// 控え帳から1件消す（ファイルを読み直してから消すので、ほかの書き込みを消さない）
+async function deleteNote($: Dollar, id: string): Promise<void> {
+  const list = await loadNotes($)
+  await saveNotes($, list.filter(n => n.id !== id))
 }
 
 // ※控え帳は専務が書き留める物（2026-10-08 決定）。私の決まり違反は別の記録（html-gate_violations.log）に残るので、
@@ -419,6 +428,7 @@ export const register: Register = on => {
     const noteList = await read($, notes)
     const open = noteList.filter(n => n.status === 'open')
     const noteNo = await read($, noteInputNo)
+    const armed = await read($, noteDeleteArmed)
 
     // 切り替えのボタン
     const tabs: { key: Tab; label: string }[] = [
@@ -509,9 +519,26 @@ export const register: Register = on => {
           )}
           {open.length === 0 && <Text dimColor>控え帳の残りはありません。</Text>}
           {open.map(n => (
-            <Text key={`n-${n.id}`}>
-              {n.at} {n.text}
-            </Text>
+            // 各行の右に〔消す〕。1回押すと〔本当に消す〕に変わり、もう1回押すと控え帳のファイルから消す
+            <Box key={`n-${n.id}`} gap={1}>
+              <Text>
+                {n.at} {n.text}
+              </Text>
+              <Button
+                key={`n-del-${n.id}`}
+                label={armed === n.id ? '本当に消す' : '消す'}
+                variant={armed === n.id ? 'primary' : 'secondary'}
+                onPress={async () => {
+                  if (armed !== n.id) {
+                    await update($, noteDeleteArmed, () => n.id)
+                    return
+                  }
+                  await deleteNote($, n.id)
+                  await update($, noteDeleteArmed, () => '')
+                  $.ui.toast('控え帳から消しました')
+                }}
+              />
+            </Box>
           ))}
           {open.length > 0 && (
             <Button

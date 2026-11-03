@@ -32,6 +32,8 @@ declare module 'claude-code' {
       sideAnswer: string
       isSideBusy: boolean
       noteInputNo: number
+      // 〔消す〕を1回押した控え帳の行の番号（空＝なし）
+      noteDeleteArmed: string
       effortPick: EffortPick
     }
   }

@@ -295,3 +295,37 @@ test('考える強さ：前の会話で選んだ強さを、次の会話でも�
   await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
   expect(await step($, { effort: 'xhigh' })).toBe('high')
 })
+
+// ★2026-11-03 専務承認（案1）：控え帳の各行の〔消す〕は2回押しで消える。1回目では消えない
+test('控え帳の〔消す〕は2回押すとその行だけ消える', async ($, on) => {
+  mock.clock(on)
+  mock.store(on)
+  on('turn.complete', ($, e) => ({ text: e.answer }))
+  on('ui.toast', () => ({ value: undefined }))
+  mock.env(on, { HOME: '/h' })
+  const files = new Map<string, string>()
+  on('fs.exists', ($, e) => ({ value: files.has(key(e.path)) }))
+  on('fs.read', ($, e) => ({ value: files.get(key(e.path)) ?? '' }))
+  on('fs.write', ($, e) => {
+    files.set(key(e.path), e.text)
+    return { value: undefined }
+  })
+  const path = '/h/dotfiles/claude/hikaecho/hikaecho.jsonl'
+  const a = { id: 'a1', at: '2026-11-03 08:00', pc: 'p', source: 'senmu', text: '消す行', status: 'open' }
+  const b = { id: 'b2', at: '2026-11-03 09:00', pc: 'p', source: 'senmu', text: '残す行', status: 'open' }
+  files.set(path, JSON.stringify(a) + '\n' + JSON.stringify(b) + '\n')
+  // 返答の終わりに控え帳を読み込む
+  await $.turn.complete({ answer: '承知しました。', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  const pane = await $.ui.mount({ ...PANE, surface: 'terminal', props: {} as never })
+  await pane.press({ key: 'tab-notes' })
+  // 1回目：〔本当に消す〕に変わるだけで、ファイルは変わらない
+  await pane.press({ key: 'n-del-a1' })
+  expect((await pane.find({ key: 'n-del-a1' }))?.text).toBe('本当に消す')
+  expect(files.get(path)?.includes('消す行')).toBe(true)
+  // 2回目：その行だけ消え、ほかの行は残る
+  await pane.press({ key: 'n-del-a1' })
+  expect(files.get(path)?.includes('"a1"')).toBe(false)
+  expect(files.get(path)?.includes('残す行')).toBe(true)
+  expect((await pane.find({ key: 'tab-notes' }))?.text).toBe('控え帳 1')
+  await pane.unmount()
+})

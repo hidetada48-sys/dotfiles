@@ -4,9 +4,11 @@ import json, os, subprocess, sys, tempfile
 GATE = os.path.expanduser("~/dotfiles/claude/hooks/approval-gate.py")
 tmp = tempfile.mkdtemp()
 EDIT = {"tool_name": "Edit", "tool_input": {"file_path": "C:/Users/miryo/mino-sakura-hq/apps/nippo/store.py"}}
+# 控え帳の書き換え（2026-11-03 専務承認：控え帳の削除をはっきり指示されたら伺わずに通す）
+HIKAE = {"tool_name": "Bash", "tool_input": {"command": "sed -i '/x/d' ~/dotfiles/claude/hikaecho/hikaecho.jsonl"}}
 
 
-def run(prev, reply):
+def run(prev, reply, edit=None):
     """私の直前の発言（prev）と専務のお返事（reply）から、関門の判定（0＝通す・2＝止める）を返す"""
     path = os.path.join(tmp, "t.jsonl")
     with open(path, "w", encoding="utf-8") as f:
@@ -16,7 +18,7 @@ def run(prev, reply):
         # お返事のあとの、ツールを呼ぶだけの私の発言とツールの結果（実際の記録と同じ並び）
         f.write(json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read"}]}}, ensure_ascii=False) + "\n")
         f.write(json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "content": "ok"}]}}, ensure_ascii=False) + "\n")
-    d = dict(EDIT, transcript_path=path, cwd="C:/Users/miryo")
+    d = dict(edit or EDIT, transcript_path=path, cwd="C:/Users/miryo")
     env = dict(os.environ, HOME=tmp, USERPROFILE=tmp)                      # 試験の判定を本物の記録に残さない
     r = subprocess.run([sys.executable, GATE], input=json.dumps(d, ensure_ascii=False).encode("utf-8"), capture_output=True, env=env)
     return r.returncode
@@ -49,10 +51,23 @@ cases = [
     ("伺いに 直っていない", ask, "直っていない", 2),
 ]
 bad = 0
+# 控え帳の削除のご指示（伺いの無い所でも、控え帳と削除・消す が同じご発言にあれば通す）
+hikae_cases = [
+    ("11/3 控え帳 1件目は削除", report, "控え帳　１件目は削除　２件目だけ対処してくれ", 0),
+    ("控え帳の2件目を消して", report, "控え帳の2件目を消して", 0),
+    ("控え帳 消さない", report, "控え帳は消さないで残せ", 2),
+    ("控え帳 削除の言葉なし", report, "控え帳を直してくれ", 2),
+    ("控え帳の話でない削除", report, "1件目は削除", 2),
+]
+for name, prev, reply, want in hikae_cases:
+    got = run(prev, reply, HIKAE)
+    ok = got == want
+    bad += not ok
+    print(("合格" if ok else "不合格"), name, "→", {0: "通す", 2: "止める"}.get(got, got))
 for name, prev, reply, want in cases:
     got = run(prev, reply)
     ok = got == want
     bad += not ok
     print(("合格" if ok else "不合格"), name, "→", {0: "通す", 2: "止める"}.get(got, got))
-print(f"{len(cases) - bad}/{len(cases)} 合格")
+print(f"{len(cases) + len(hikae_cases) - bad}/{len(cases) + len(hikae_cases)} 合格")
 sys.exit(1 if bad else 0)

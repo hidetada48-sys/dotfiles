@@ -13,6 +13,18 @@ esac
 cd "$PROJECT" || exit 0
 [ -f tools/teirei.py ] || exit 0
 
+# ★その日の最初の起動だけ通知する（2026-11-03 専務承認・控え帳 11/3「作業のたびに出る　初回起動のみでいい」）
+# 会話を始めるたび（起動・新しい会話・再開・/compact）にこのフックが動くため、通知した日付をパソコンごとに控え、
+# 同じ日の2回目以降は表づくり・サーバーからのコピーを行わず、Claude あての1行だけを渡して終える
+STAMP="$HOME/.claude/state/teirei_notified.txt"
+TODAY=$(date +%Y-%m-%d)
+if [ -f "$STAMP" ] && [ "$(cat "$STAMP" 2>/dev/null)" = "$TODAY" ]; then
+  echo "【定例業務】本日（$TODAY）の通知は、その日の最初の起動で済み。チャットに定例業務の2行を出さない（専務に尋ねられたとき・表の作り直しを頼まれたときだけ python tools/teirei.py を流して答える）。"
+  exit 0
+fi
+mkdir -p "$HOME/.claude/state" 2>/dev/null
+echo "$TODAY" > "$STAMP" 2>/dev/null
+
 # 起動モードの案内（これまで週初回チェックが出していたもの）
 echo ""
 echo "【起動モード】専務モード(業務) / 裏方モード(仕組みづくり) / 休日モード。未宣言なら専務モードとみなす。"

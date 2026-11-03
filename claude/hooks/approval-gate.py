@@ -64,6 +64,10 @@ YES = re.compile(r"はい|ええ|うん|いい|よい|良い|よし|了解|そ�
                  r"|([ろせ]|(?<![そこあど])れ)(?=[\s。、！!　]|$)"                      # 並べろ・消せ・やれ（それ・これ は除く）
                  r"|(?<!だ)[けえ](?=[\s。、！!　]|$)", re.M)                           # 書け・使え（だけ は除く）
 # 打ち消し・問い返し
+# 控え帳の削除のはっきりした指示（2026-11-03 専務承認・案1）：「控え帳　1件目は削除」のように、
+# 控え帳と削除・消す を同じご発言で言われたら、伺わずに控え帳を書き換えてよい（控え帳のファイルに限る）
+HIKAECHO = "/hikaecho/"
+HIKAECHO_DELETE = re.compile(r"削除|消し|消せ|消して|消す")
 NO = re.compile(r"いや|いいえ|違う|違い|ちがう|ではな|じゃな|だめ|ダメ|駄目|待て|待って|まって|やめ|止め|ストップ|まだ"
                 r"|不要|いらな|要らな|なぜ|なんで|どうして")
 
@@ -140,6 +144,15 @@ def approved(text, prev=""):
     return bool(YES.search(reply))
 
 
+def hikaecho_delete(text):
+    """控え帳の削除をはっきり指示されたか（控え帳と、削除・消す が同じご発言にあり、打ち消しが無い）"""
+    if not text or "控え帳" not in text:
+        return False
+    if re.search(r"いや|違う|ではな|じゃな|だめ|ダメ|待て|待って|やめ|消さない|削除しない", text):
+        return False
+    return bool(HIKAECHO_DELETE.search(text))
+
+
 def full(w, cwd):
     """相対パスは作業フォルダからの位置にする（~ はホームに置き換える）"""
     # $TEMP などの置き場の名前は実際のフォルダの場所に置き換える（2026-10-05：日報アプリのフォルダで
@@ -190,6 +203,9 @@ def main():
     if not what:
         return 0
     text, prev = last_exchange(data.get("transcript_path", ""))
+    if HIKAECHO in what and hikaecho_delete(text):
+        log(f"通した（控え帳の削除のご指示）\t{what}")
+        return 0
     if approved(text, prev):
         log(f"通した\t{what}")
         return 0
