@@ -18,8 +18,8 @@
   0. クオリティ診断（①か②）を伺っていない、または専務のお答えが無い（2026-10-21）
   1. この会話で見本（2026-10-17_抄紙日報の評価と要因_説明資料_見本.md）を読んでいない
   2. この会話で説明資料の手順書（setsumei-shiryo スキル）を使っていない
-  3. 新しく作るとき：私が「事前の見立て」をお出ししたあとに、専務の了承の言葉が無い
-     （了承・承認・進めて・お願いします・OK など。既にある説明資料の手直しは 1・2 だけを見る）
+  3. 新しく作るとき：私が「事前の見立て」か、クオリティ診断を入れた作る伺いをお出ししたあとに、専務の承認のお返事が無い
+     （2026-11-04 専務承認：書き換え前の確認と同じく会話の流れで受け取る＝作れ・はい・それで・〜にしろ なども承認）
 対象：
   - Edit / Write / MultiEdit で、名前に「説明資料」を含みスライドの形（<section）の md
     （2026-10-21 から日付で外さない＝過去の資料も直すときは対象。名前に「スライド資料」を含む物も対象）
@@ -50,8 +50,41 @@ EXEMPT_PY = ("check_deck.py", "report_html.py", "precheck-answer.py", "check_lin
 EXCEL_SAMPLE = "原料仕入分析"   # エクセルの見本（見せ方と体裁）＝この名前の画像（excel_check/原料仕入分析/…jpg）を見たか
 
 APPROVE = re.compile(r"了承|承認(する|します|です|だ|で(いい|よい|良い|OK|ok)|。|！|!|\s|$)|^\s*承認|進めて|進めろ|それでやって"
-                     r"|お願いします|作って|(?<![A-Za-zＡ-Ｚａ-ｚ])(?:ok|OK|Ok|ｏｋ|ＯＫ|Ｏｋ)(?![A-Za-zＡ-Ｚａ-ｚ])")
+                     r"|お願いします|作って|作れ(?![るなばま])|(?<![A-Za-zＡ-Ｚａ-ｚ])(?:ok|OK|Ok|ｏｋ|ＯＫ|Ｏｋ)(?![A-Za-zＡ-Ｚａ-ｚ])")
 NOT_APPROVE = re.compile(r"承認を得|承認な[しく]|承認して(から|い?ない)|無承認|承認が(ない|無い)|承認しない|了承しない|了承できない|了承でき(ず|ません)")
+
+
+def _load_approval_gate():
+    """書き換え前の確認（approval-gate.py）の承認の判定を借りる（2026-11-04 専務承認・控え帳 11/4 夜
+    「これ直したよな くだらない」＝10/29 に会話の流れで承認を受け取るよう直したのは approval-gate.py だけで、
+    このプログラムは決まった言葉の一覧のまま残り「作れ」を数えなかった）。読めないときは None（下の言葉の一覧だけで見る）"""
+    try:
+        import importlib.util
+        f = os.path.join(os.path.dirname(os.path.abspath(__file__)), "approval-gate.py")
+        spec = importlib.util.spec_from_file_location("approval_gate", f)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+    except Exception:
+        return None
+
+
+AG = _load_approval_gate()
+
+
+def is_approval(text, prev=""):
+    """専務のお返事が承認か＝書き換え前の確認と同じ判定（決まった言葉、または私の伺いへの受け入れるお返事）"""
+    if AG is not None:
+        return AG.approved(text, prev) or bool(APPROVE.search(NOT_APPROVE.sub("", text or "")))
+    return bool(APPROVE.search(NOT_APPROVE.sub("", text or "")))
+
+
+def is_refusal(text):
+    """打ち消し・問い返し（承認の取り消しとみなす）"""
+    t = (text or "").strip()
+    if t.endswith(("？", "?")):
+        return False   # 問い返しは承認でも取り消しでもない
+    return bool(AG.NO.search(t)) if AG is not None else False
 
 
 def norm(p):
@@ -260,22 +293,25 @@ def diagnosis(evs):
         t = user_text(e)
         if t and re.search(r"(クオリティ)?診断(は|を)?(あてず|当てず|あてない|当てない|なし|無し|不要|いらない|要らない)", t):
             return "なし", t.strip()[:80]
-    last = -1
-    for i, e in enumerate(evs):
+    # 2026-11-04 専務承認（案3）：会話の中のいちばん新しいお答えを使う。私が伺う前のお言葉（「クオリティ診断は体裁だけでいいからな」）も数え、
+    # 私が後でもう一度「クオリティ診断」と書いても前のお答えを捨てない。①②の記号だけは私が伺ったあとのお返事に限る（ほかの意味の①②と取り違えない）
+    asked = False
+    found = ("", "")
+    for e in evs:
         if e.get("type") == "assistant" and any(
                 b.get("type") == "text" and "クオリティ診断" in b.get("text", "") for b in blocks(e)):
-            last = i
-    if last < 0:
-        return "", ""
-    for e in evs[last + 1:]:
+            asked = True
+            continue
         t = user_text(e)
         if not t:
             continue
-        hits = [(t.find(k), v) for k, v in (("①", "①"), ("体裁だけ", "①"), ("②", "②"), ("体裁と中身", "②"),
-                                            ("A＋B", "②"), ("A+B", "②")) if k in t]
+        words = [("体裁だけ", "①"), ("体裁と中身", "②"), ("A＋B", "②"), ("A+B", "②")]
+        if asked:
+            words += [("①", "①"), ("②", "②")]
+        hits = [(t.find(k), v) for k, v in words if k in t]
         if hits:
-            return min(hits)[1], t.strip()[:80]
-    return "", ""
+            found = (min(hits)[1], t.strip()[:80])
+    return found
 
 
 def save_record(root, key, kind, mode, said, src):
@@ -300,25 +336,35 @@ def save_record(root, key, kind, mode, said, src):
         fh.write(json.dumps(rec, ensure_ascii=False, indent=1) + "\n")
 
 
-def agreed_after(evs, word):
-    """私が word を含む文をお出ししたあとに、専務の承認の言葉があるか"""
-    last = -1
-    for i, e in enumerate(evs):
-        if e.get("type") == "assistant" and any(
-                b.get("type") == "text" and word in b.get("text", "") for b in blocks(e)):
-            last = i
-    if last < 0:
+def agreed_after(evs, *words):
+    """私が words のどれかを含む文をお出ししたあとに、専務の承認のお返事があるか（2026-11-04 専務承認・案3）。
+    承認の判定は書き換え前の確認と同じ（決まった言葉、または私の伺いへの受け入れるお返事＝作れ・はい・それで・〜にしろ など）。
+    最初にお出ししたあとの専務のお返事のうち、いちばん新しい「承認」か「打ち消し」で決める（問い返しは数えない）"""
+    first = next((i for i, e in enumerate(evs) if e.get("type") == "assistant" and any(
+        b.get("type") == "text" and any(w in b.get("text", "") for w in words) for b in blocks(e))), -1)
+    if first < 0:
         return False
-    for e in evs[last + 1:]:
+    prev, state = "", False
+    for e in evs[first:]:
+        if e.get("type") == "assistant":
+            t = "".join(b.get("text", "") for b in blocks(e) if b.get("type") == "text")
+            if t.strip():
+                prev = t          # 専務のお返事の直前の私の発言（伺いで終わっているかを見る）
+            continue
         t = user_text(e)
-        if t and APPROVE.search(NOT_APPROVE.sub("", t)):
-            return True
-    return False
+        if not t:
+            continue
+        if is_approval(t, prev):
+            state = True
+        elif is_refusal(t):
+            state = False
+    return state
 
 
 def agreed_after_plan(evs):
-    """私が「事前の見立て」をお出ししたあとに、専務の了承の言葉があるか"""
-    return agreed_after(evs, "事前の見立て")
+    """作る伺いへの専務の承認があるか。伺いと一緒にお出しする作りの説明を事前の見立てとする（2026-11-04 専務承認・案3＝
+    「作ってよいか」の伺いにクオリティ診断を同じ文で入れるので、「クオリティ診断」を書いた伺いのあとの承認も数える）"""
+    return agreed_after(evs, "事前の見立て", "クオリティ診断")
 
 
 def log(msg):

@@ -327,6 +327,170 @@ def stop_on_table_notes(body):
     return True
 
 
+# ─── 比べの表の型（2026-11-04 専務承認・控え帳 11/4「5回表を作り直させている」「差の列の合計と10月の繰越は合うか」）───
+# 試算と調査帳のように2つの数字を比べる表は、最初から次の形で作る：
+#   差の列（例「差（試算−調査帳）」）／月の行の下に差の出た日・勤の行（「└ 10/12 B勤」＝その行の差の合計＝月の差）／
+#   最後に計の行（コメントに差のつながりの式「繰越の差 −130＝仕入の差 0−使用量の差 +130」）。
+# ※同じ判定を mino-sakura-hq の tools/check_excel.py にも置いている（片方を直したらもう片方も直す）
+PERIOD_RE = __import__("re").compile(r"\d+\s*月|\d+/\d+|[ABCＡＢＣ]\s*勤|\d+\s*週|\d{4}\s*年")
+
+
+def _num(v):
+    """セルの値を数に直す（3,120・−130・+77・▲10・77kg など）。数でなければ None"""
+    import re
+    if isinstance(v, bool) or v is None:
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip().strip("*").strip()
+    s = s.replace(",", "").replace("−", "-").replace("－", "-").replace("▲", "-").replace("＋", "+")
+    s = re.sub(r"\s*(kg|t|円|千円|個|回|%|％)$", "", s)
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _formula_ok(text):
+    """コメントの「A＝B」の式を数で確かめる。数の式として読めなければ None（読めた式が合わなければ False）"""
+    import re
+    m = re.search(r"([^＝=]*)[＝=]([^＝=。；;（(]*)", text or "")
+    if not m:
+        return None
+    vals = []
+    for side in m.groups():
+        s = side.replace(",", "").replace("−", "-").replace("－", "-").replace("＋", "+").replace("×", "*").replace("÷", "/")
+        s = re.sub(r"[^0-9.+\-*/ ]", " ", s).strip()
+        if not re.search(r"\d", s) or not re.fullmatch(r"[+\-]?\s*\d+(\.\d+)?(\s*[+\-*/]\s*[+\-]?\s*\d+(\.\d+)?)*", s):
+            return None
+        try:
+            vals.append(eval(s, {"__builtins__": {}}))   # 数と + − × ÷ だけの式に限って計算する
+        except Exception:
+            return None
+    return abs(vals[0] - vals[1]) < 0.5
+
+
+def diff_table_issues(header, rows, where=""):
+    """比べの表（見出しに「差」の列がある表）が型どおりかを見て、問題を文で返す。
+    header＝見出しの行のセル／rows＝見出しより下の行（セルの並び）。
+    見るのは、月・日・勤ごとの行がある表か、日・勤の行（└）がある表だけ（項目を並べただけの表は見ない）"""
+    heads = [str(h or "").replace("\n", "") for h in header]
+    # 差の列＝足し合わせて意味のある量・金額の差だけ。単価・率・倍率の差（左の2列か自分の見出しに 単価・/・率・倍・% がある）、
+    # 帳票の「差引き」、「差なし」の列は見ない（2026-11-04 既存のエクセル・レポートで試して誤って止まった3種）
+    unit_re = __import__("re").compile(r"単価|/|／|率|倍|%|％")
+    dcols = [i for i, h in enumerate(heads)
+             if i > 0 and "差" in h and not any(w in h for w in ("差し", "差引", "差なし"))
+             and not any(unit_re.search(x) for x in heads[max(1, i - 2):i + 1])]
+    if not dcols or not rows:
+        return []
+    if any(w in heads[0] for w in ("時点", "末")):
+        return []   # ある時点の残高を並べた表（有給の残り日数など）は足し合わせても意味が無いので見ない
+    ccol = next((i for i, h in enumerate(heads) if "コメント" in h), None)
+    lab = lambda r: str(r[0] or "").strip().strip("*").strip() if r else ""
+    is_child = lambda r: lab(r).lstrip("　 ").startswith("└")
+    is_total = lambda r: (not is_child(r)) and ("計" in lab(r))
+    parents = [r for r in rows if lab(r) and not is_child(r) and not is_total(r)]
+    if not (any(is_child(r) for r in rows) or sum(1 for r in parents if PERIOD_RE.search(lab(r))) >= 2):
+        return []
+    out = []
+    totals = [r for r in rows if is_total(r)]
+    if not totals:
+        out.append(f"{where}差の列がある比べの表に、計の行が無い（最後に計の行を置き、コメントに差のつながりの式を書く）")
+    # 月の行の差＝その下の日・勤の行（└）の差の合計
+    for k, r in enumerate(rows):
+        if is_child(r) or is_total(r) or not lab(r):
+            continue
+        kids = []
+        for r2 in rows[k + 1:]:
+            if not is_child(r2):
+                break
+            kids.append(r2)
+        if not kids:
+            continue
+        for c in dcols:
+            pv = _num(r[c]) if c < len(r) else None
+            kv = [_num(x[c]) for x in kids if c < len(x) and _num(x[c]) is not None]
+            if pv is None or not kv:
+                continue
+            if abs(sum(kv) - pv) >= 0.5:
+                out.append(f"{where}「{lab(r)}」の「{heads[c]}」{pv:,.0f} と、下の日・勤の行の差の合計 {sum(kv):,.0f} が合わない")
+    # 計の行のコメントに差のつながりの式（＝）があり、数が合うか
+    for t in totals:
+        note = str(t[ccol] or "") if (ccol is not None and ccol < len(t)) else ""
+        if ccol is None:
+            out.append(f"{where}比べの表にコメントの列が無い（計の行に差のつながりの式を書く列が要る）")
+        elif "＝" not in note and "=" not in note:
+            out.append(f"{where}計の行「{lab(t)}」のコメントに、差のつながりの式（例「繰越の差 −130＝仕入の差 0−使用量の差 +130」）が無い")
+        elif _formula_ok(note) is False:
+            out.append(f"{where}計の行「{lab(t)}」のコメントの式が数として合わない「{note[:40]}」")
+    return out
+
+
+def md_diff_tables(raw):
+    """マークダウンの表を1つずつ取り出し、比べの表の型を確かめる"""
+    lines = raw.splitlines()
+    msgs, i, n = [], 0, 0
+    while i < len(lines):
+        if not lines[i].lstrip().startswith("|"):
+            i += 1
+            continue
+        block = []
+        while i < len(lines) and lines[i].lstrip().startswith("|"):
+            block.append([c.strip() for c in lines[i].strip().strip("|").split("|")])
+            i += 1
+        n += 1
+        if len(block) >= 3:
+            msgs += diff_table_issues(block[0], block[2:], f"表{n}：")
+    return msgs
+
+
+def stop_on_diff_tables(body):
+    bad = md_diff_tables(body)
+    if not bad:
+        return False
+    print("NG：比べの表が型どおりでない。差の列・日・勤の行（└）・計の行（コメントに差のつながりの式）を直してから、もう一度 --report する")
+    print("    （型＝2026-11-04 専務承認。見本＝mino-sakura-hq production/やりとり/2026-11-04_原料繰越の試算と調査帳の比べ.xlsx）")
+    for m in bad[:8]:
+        print(f"  {m}")
+    return True
+
+
+# ─── 自分で確かめた物の欄（2026-11-04 専務承認・控え帳 11/4「自分で確かめられることをやっていなかったのか 怠慢だな」）───
+# 専務に確かめをお願いする文があれば、書き出しに「自分で確かめた物：」の欄（1か所ずつ、見た原本か、手元に無い理由）を求める
+SELF_RE = __import__("re").compile(r"^\s*自分で確かめた物\s*[：:]\s*\S", __import__("re").M)
+REQ_RE = __import__("re").compile(r"確かめていただ|お確かめ|確かめてください|ご確認(ください|いただ|を|願)|確認していただ|確認してください|確かめる所|見ていただ")
+
+
+def stop_on_no_self_check(inv, body):
+    if not REQ_RE.search(body or "") or SELF_RE.search(inv or ""):
+        return False
+    print("NG：専務に確かめをお願いする文があるのに、書き出しに「自分で確かめた物」の欄が無い。")
+    print("    お願いする前に、1か所ずつ手元の原本（紙のスキャン・サーバーの日報のスキャン・読み取りの記録など）で見られるかを調べ、見られる物は見てから書く：")
+    print("  自分で確かめた物：9/18 山県市役所＝原料日誌の紙のスキャンで確認済み／9/21 C勤＝スキャンが無い（手元に無い）")
+    print("    専務にお願いしてよいのは、手元に無い物（伝票・現場の紙など）だけ（2026-11-04 専務承認）")
+    return True
+
+
+# ─── 作る伺いにクオリティ診断を入れる（2026-11-04 専務承認・控え帳 11/4 夜「クオリティ診断 作る前に方針を聞け」）───
+# エクセル・スライド資料を新しく作ってよいかを伺う文には、同じ返答の中でクオリティ診断（①体裁だけ／②体裁と中身）を伺う。
+# 11/4 夜「この作りで見本のエクセルを作ってよろしいですか」と伺い、「作れ」のあとで診断と見立てを別に伺って3回やりとりを増やした
+MAKE_RE = __import__("re").compile(r"(エクセル|スライド資料|説明資料).*作(って|成して)(も)?(よろし|よい|いい|良い)")
+
+
+def stop_on_make_without_diagnosis(body):
+    if "クオリティ診断" in (body or ""):
+        return False
+    hits = [l.strip() for l in (body or "").splitlines() if MAKE_RE.search(l)]
+    if not hits:
+        return False
+    print("NG：エクセル・スライド資料を作ってよいかの伺いに、クオリティ診断が入っていない。同じ伺いの中で診断も伺ってから出す：")
+    print("  （例）この作りで○○のエクセルを作ってよろしいですか。クオリティ診断は①体裁だけ／②体裁と中身のどちらにしますか。")
+    print("    既にある物の修正・定例の作り直しは診断を伺わない（その場合は「作って」でなく「直して」「作り直して」と書く）")
+    for h in hits[:3]:
+        print(f"  「{h[:60]}」")
+    return True
+
+
 def stop_on_prose(body):
     bad = prose_lines(body)
     if not bad:
@@ -650,6 +814,10 @@ if __name__ == "__main__":
         sys.exit(1)
     if stop_on_no_basis(inv):                             # ①'' 根拠の欄（2026-10-17 専務承認）
         sys.exit(1)
+    if stop_on_no_self_check(inv, body):                  # ①''' 自分で確かめた物の欄（2026-11-04 専務承認）
+        sys.exit(1)
+    if stop_on_make_without_diagnosis(body):              # ①'''' 作る伺いにクオリティ診断（2026-11-04 専務承認）
+        sys.exit(1)
     path = body_file(src, body)
     if rep:
         # 置き場の指定は、文章の点検（時間がかかる）より先に確かめる（2026-10-13）
@@ -661,7 +829,8 @@ if __name__ == "__main__":
             sys.exit(1)
         # 案ごとの5つの見出しは AI を使わずに数える（待ち時間なし・2026-10-17 専務承認）。
         # レポート全体の「お尋ねに答え切っているか」の AI の点検は、待ち時間が増えるため加えない（同日 専務指示）
-        if (stop_on_prose(body) or stop_on_table_notes(body) or stop_on_thin_options(body) or stop_on_jargon(path)
+        if (stop_on_prose(body) or stop_on_table_notes(body) or stop_on_diff_tables(body)
+                or stop_on_thin_options(body) or stop_on_jargon(path)
                 or stop_on_plain(body, inv, check_answer=False)):
             sys.exit(1)
         sys.exit(to_report(path, sys.argv[3] if len(sys.argv) >= 4 else "回答",
