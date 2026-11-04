@@ -271,6 +271,62 @@ def prose_lines(body):
     return out
 
 
+def table_notes_below(raw):
+    """表のすぐ下（次の見出しまで）の文が、表の1つの行の説明になっていれば名指しする。
+    ★2026-11-04 専務指示：表に書き足せば説明できる数字・コメントは表の中（コメント列）に書く。
+      表の下に書いてよいのは、複数の行を見渡した考察・結論・次の一手だけ。
+    判定＝表の下の文が ①表の中の数字（3桁以上）をもう一度並べている ②表の行の見出しを1つだけ挙げている、のどちらか。
+    ※同じ判定を mino-sakura-hq の tools/report_html.py にも置いている（片方を直したらもう片方も直す）"""
+    import re   # このファイルは関数ごとに読み込む書き方（ほかの関数と同じ）
+    num_re = re.compile(r"\d{1,3}(?:,\d{3})+|\d{3,}")
+    lines = raw.splitlines()
+    msgs = []
+    i = 0
+    while i < len(lines):
+        if not lines[i].lstrip().startswith("|"):
+            i += 1
+            continue
+        rows = []
+        while i < len(lines) and lines[i].lstrip().startswith("|"):
+            rows.append(lines[i])
+            i += 1
+        labels, nums = set(), set()
+        for r in rows[2:]:   # 見出しの行と区切りの行は除く
+            cells = [c.strip().strip("*").strip() for c in r.strip().strip("|").split("|")]
+            if cells and len(cells[0]) >= 2:
+                labels.add(cells[0])
+            for c in cells[1:]:
+                nums.update(n.replace(",", "") for n in num_re.findall(c))
+        while i < len(lines) and not lines[i].lstrip().startswith("#"):
+            t = lines[i].strip()
+            i += 1
+            if not t or t.startswith("|") or t.startswith("<"):
+                continue
+            # 表のコメント欄の番号（※1 など）ごとのコメントは表の一部とみなす（2026-11-04 専務指示）
+            if re.match(r"^[-*・]?\s*※\d", t):
+                continue
+            body = re.sub(r"\(https?://[^)]*\)|`[^`]*`", "", t)
+            hit_nums = [n for n in num_re.findall(body) if n.replace(",", "") in nums]
+            hit_labels = [l for l in labels if l in body]
+            if hit_nums or len(hit_labels) == 1:
+                why = f"表の数字「{hit_nums[0]}」" if hit_nums else f"表の行「{hit_labels[0]}」"
+                msgs.append(f"表の下の文が{why}の説明「{t[:40]}」")
+            if i < len(lines) and lines[i].lstrip().startswith("|"):
+                break
+    return msgs
+
+
+def stop_on_table_notes(body):
+    bad = table_notes_below(body)
+    if not bad:
+        return False
+    print("NG：表の下に、表の1つの行の説明がある。その行のコメント欄へ移す（長いときは欄に※番号を付け、表のすぐ下に「- ※番号 …」で書く）。直してから、もう一度 --report する")
+    print("    （表の下に書いてよいのは、複数の行を見渡した考察・結論・次の一手だけ＝2026-11-04 専務指示）")
+    for m in bad[:8]:
+        print(f"  {m}")
+    return True
+
+
 def stop_on_prose(body):
     bad = prose_lines(body)
     if not bad:
@@ -605,7 +661,7 @@ if __name__ == "__main__":
             sys.exit(1)
         # 案ごとの5つの見出しは AI を使わずに数える（待ち時間なし・2026-10-17 専務承認）。
         # レポート全体の「お尋ねに答え切っているか」の AI の点検は、待ち時間が増えるため加えない（同日 専務指示）
-        if (stop_on_prose(body) or stop_on_thin_options(body) or stop_on_jargon(path)
+        if (stop_on_prose(body) or stop_on_table_notes(body) or stop_on_thin_options(body) or stop_on_jargon(path)
                 or stop_on_plain(body, inv, check_answer=False)):
             sys.exit(1)
         sys.exit(to_report(path, sys.argv[3] if len(sys.argv) >= 4 else "回答",
