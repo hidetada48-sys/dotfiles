@@ -59,6 +59,23 @@ hikae_cases = [
     ("控え帳 削除の言葉なし", report, "控え帳を直してくれ", 2),
     ("控え帳の話でない削除", report, "1件目は削除", 2),
 ]
+# 噛み砕きの合図（2026-11-07 専務承認）：/噛み砕き のあとは資料を作るプログラム（各参謀の scripts）だけ通す
+SCRIPT = {"tool_name": "Edit", "tool_input": {"file_path": "/home/x/mino-sakura-hq/production/scripts/shoshi_monthly_yomikata.py"}}
+KAMI = "<command-message>噛み砕き</command-message>\n<command-name>/噛み砕き</command-name>\n<command-args>本体22ページの赤</command-args>"
+KAMI_EN = "<command-message>噛み砕き</command-message>\n<command-name>/kamikudaki</command-name>\n<command-args></command-args>"
+signal_cases = [
+    ("/噛み砕き のあとの参謀の scripts", report, KAMI, SCRIPT, 0),
+    ("/kamikudaki のあとの参謀の scripts", report, KAMI_EN, SCRIPT, 0),
+    ("/噛み砕き のあとでも仕組みのファイルは止める", report, KAMI, EDIT, 2),
+    ("合図なしの参謀の scripts", report, "日報の資料を直してくれ", SCRIPT, 2),
+    ("ほかのスラッシュの合図", report, "<command-name>/effort</command-name>", SCRIPT, 2),
+]
+for name, prev, reply, edit, want in signal_cases:
+    got = run(prev, reply, edit)
+    ok = got == want
+    bad += not ok
+    print(("合格" if ok else "不合格"), name, "→", {0: "通す", 2: "止める"}.get(got, got))
+cases_n = len(signal_cases)
 for name, prev, reply, want in hikae_cases:
     got = run(prev, reply, HIKAE)
     ok = got == want
@@ -69,5 +86,5 @@ for name, prev, reply, want in cases:
     ok = got == want
     bad += not ok
     print(("合格" if ok else "不合格"), name, "→", {0: "通す", 2: "止める"}.get(got, got))
-print(f"{len(cases) + len(hikae_cases) - bad}/{len(cases) + len(hikae_cases)} 合格")
+print(f"{len(cases) + len(hikae_cases) + cases_n - bad}/{len(cases) + len(hikae_cases) + cases_n} 合格")
 sys.exit(1 if bad else 0)

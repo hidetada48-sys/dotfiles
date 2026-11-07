@@ -23,6 +23,8 @@
   そのお返事に受け入れる言い方（はい・いい・それで・直して・消せ・並べろ・〜にしろ など）があれば承認とみなす。
   打ち消し（いや・違う・ではない・だめ・待て・やめ など）・問い返し（「？」で終わる・なぜ）があれば承認としない。
   伺いの無いところでの「直してくれ」「〜しろ」だけの依頼は、今までどおり承認とみなさない（10/5 の再発防止）
+噛み砕きの合図（2026-11-07 専務承認）：専務が「/噛み砕き」を打ったら、資料を作るプログラム（各参謀の scripts）の書き換えは通す
+  （合図そのものが作り直しの承認。仕組みのファイルは今までどおり伺う。正典＝mino-sakura-hq の docs/噛み砕きの物差し.md）
 止めたら exit 2 で理由を私に返し、記録（~/.claude/logs/approval-gate.log）に残す。
 """
 import datetime as dt
@@ -70,6 +72,10 @@ HIKAECHO = "/hikaecho/"
 HIKAECHO_DELETE = re.compile(r"削除|消し|消せ|消して|消す")
 NO = re.compile(r"いや|いいえ|違う|違い|ちがう|ではな|じゃな|だめ|ダメ|駄目|待て|待って|まって|やめ|止め|ストップ|まだ"
                 r"|不要|いらな|要らな|なぜ|なんで|どうして")
+# 噛み砕きの合図（2026-11-07 専務承認・案2）：専務が「/噛み砕き」（または /kamikudaki）を打ったら、分からない所を
+#   噛み砕きの物差しで作り直す指示そのもの＝承認。通すのは資料を作るプログラム（各参謀の scripts）の書き換えだけ
+#   （仕組みのファイル＝tools・lib・apps・.claude・dotfiles は今までどおり伺う）
+SIGNAL = re.compile(r"<command-name>/(?:噛み砕き|kamikudaki)</command-name>")
 
 
 def norm(p):
@@ -184,6 +190,14 @@ def target(tool, inp, cwd=""):
     return ""
 
 
+def signal_ok(tool, inp, text):
+    """噛み砕きの合図のあとで、資料を作るプログラム（各参謀の scripts）を Edit・Write で書き換えるときだけ通す"""
+    if not text or not SIGNAL.search(text) or tool not in ("Edit", "Write", "MultiEdit"):
+        return False
+    p = norm(inp.get("file_path") or "")
+    return any(r.search(p) for r in PROTECTED_RE) and not any(k in p for k in PROTECTED)
+
+
 def log(msg):
     try:
         d = os.path.join(os.path.expanduser("~"), ".claude", "logs")
@@ -205,6 +219,9 @@ def main():
     text, prev = last_exchange(data.get("transcript_path", ""))
     if HIKAECHO in what and hikaecho_delete(text):
         log(f"通した（控え帳の削除のご指示）\t{what}")
+        return 0
+    if signal_ok(data.get("tool_name", ""), data.get("tool_input") or {}, text):
+        log(f"通した（噛み砕きの合図）\t{what}")
         return 0
     if approved(text, prev):
         log(f"通した\t{what}")
