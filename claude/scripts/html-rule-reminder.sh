@@ -14,7 +14,19 @@ try:
     d=json.loads(sys.stdin.buffer.read().decode("utf-8","replace"))
     t=d.get("prompt") or ""
     if t.strip():
-        open(os.path.join(os.path.expanduser("~"),".claude","state","last_prompt.txt"),"w",encoding="utf-8").write(t)
+        st=os.path.join(os.path.expanduser("~"),".claude","state")
+        open(os.path.join(st,"last_prompt.txt"),"w",encoding="utf-8").write(t)
+        # ★2026-11-07 専務「直せ」：2つの会話を同時に開くと控えが後の会話のお尋ねに置き換わったため、会話ごとにも控える
+        sid="".join(c for c in (d.get("session_id") or "") if c.isalnum() or c=="-")
+        if sid:
+            dd=os.path.join(st,"last_prompt"); os.makedirs(dd,exist_ok=True)
+            open(os.path.join(dd,sid+".txt"),"w",encoding="utf-8").write(t)
+            import time   # 14日より古い会話の控えは消す（増え続けないように）
+            for f in os.listdir(dd):
+                fp=os.path.join(dd,f)
+                try:
+                    if time.time()-os.path.getmtime(fp)>14*86400: os.remove(fp)
+                except Exception: pass
 except Exception:
     pass' 2>/dev/null
 fi

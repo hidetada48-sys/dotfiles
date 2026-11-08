@@ -680,6 +680,11 @@ PLAIN_CACHE = Path.home() / ".claude" / "state" / "plain-check"
 
 COMPANY = Path(__file__).with_name("company_words.txt")
 LAST_PROMPT = Path.home() / ".claude" / "state" / "last_prompt.txt"
+# ★2026-11-07 専務「直せ」：会話ごとの控え（注意書きのフックが session_id で書く）を先に読む。
+#   無ければ全会話で1つの控えを読む（古い版のフック・会話の番号が取れない環境）
+_SID = "".join(c for c in os.environ.get("CLAUDE_CODE_SESSION_ID", "") if c.isalnum() or c == "-")
+if _SID and (Path.home() / ".claude" / "state" / "last_prompt" / f"{_SID}.txt").exists():
+    LAST_PROMPT = Path.home() / ".claude" / "state" / "last_prompt" / f"{_SID}.txt"
 
 
 def _lines_of(path):
