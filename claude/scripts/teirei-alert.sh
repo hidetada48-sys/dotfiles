@@ -60,6 +60,12 @@ if [ -f clients/scripts/claim_server_pull.py ]; then
   [ -n "$CLAIM" ] && { echo ""; echo "========== クレーム台帳 =========="; echo "$CLAIM"; }
 fi
 
+# 運賃照合アプリが共用フォルダに作った照合表・請求書・売上明細をリポジトリへコピーしてから判定する（届かなければ何もしない・2026-11-09 専務「エスラインから作れ」）
+if [ -f finance/scripts/unchin_server_pull.py ]; then
+  UNCHIN=$(PYTHONIOENCODING=utf-8 "$PY" finance/scripts/unchin_server_pull.py 2>/dev/null)
+  [ -n "$UNCHIN" ] && { echo ""; echo "========== 運賃照合 =========="; echo "$UNCHIN"; }
+fi
+
 # .xls を読む部品（xlrd）が無ければ uv で足して流す
 if "$PY" -c 'import xlrd, openpyxl' >/dev/null 2>&1; then
   PYTHONIOENCODING=utf-8 "$PY" tools/teirei.py 2>/dev/null
