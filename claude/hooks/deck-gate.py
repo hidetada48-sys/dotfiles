@@ -33,6 +33,10 @@
   - 既にある資料の md・エクセルを作る既にあるプログラムの直し、書き出す先の資料が既にあるプログラムの実行（"修正"）と、
     中身に「元の資料：<既にある md>」と書いた資料・プログラム（"派生"＝既にある資料へのお尋ねに答える資料）は、
     クオリティ診断・見本・事前の見立てを求めず、元の資料のクオリティのまま作る。手順書を使ったかだけ見る。控えも付けない
+1回のお返事で通す（2026-11-09 専務承認・控え帳 11/9 13:41「診断なし」「作れ」の二度手間・案2）：
+  - 診断のお答え（診断なし・体裁だけ など）は、書き換え前の確認（approval-gate.py）でも承認と数える
+  - 「診断なし」は打ち消し・問い返しのお言葉では数えない。新しく作るときは、診断なしでも作る伺いへのお返事を求める
+  - エクセルを作る新しいプログラムでも、中身に「元の資料：<既にある .py か .xlsx>」と書いた物は"派生"（診断を伺わない）
 止めたら exit 2 で理由を私に返し（専務の画面には出ない）、記録（~/.claude/logs/deck-gate.log）に残す。
 """
 import datetime as dt
@@ -52,6 +56,8 @@ EXCEL_SAMPLE = "原料仕入分析"   # エクセルの見本（見せ方と体�
 APPROVE = re.compile(r"了承|承認(する|します|です|だ|で(いい|よい|良い|OK|ok)|。|！|!|\s|$)|^\s*承認|進めて|進めろ|それでやって"
                      r"|お願いします|作って|作れ(?![るなばま])|(?<![A-Za-zＡ-Ｚａ-ｚ])(?:ok|OK|Ok|ｏｋ|ＯＫ|Ｏｋ)(?![A-Za-zＡ-Ｚａ-ｚ])")
 NOT_APPROVE = re.compile(r"承認を得|承認な[しく]|承認して(から|い?ない)|無承認|承認が(ない|無い)|承認しない|了承しない|了承できない|了承でき(ず|ません)")
+# 「診断なし」のお答え（2026-10-22 専務指示）
+NO_DIAG = re.compile(r"(クオリティ)?診断(は|を)?(あてず|当てず|あてない|当てない|なし|無し|不要|いらない|要らない)")
 
 
 def _load_approval_gate():
@@ -130,16 +136,15 @@ def excel_target(tool, inp, cwd):
     return (f"エクセルを作るプログラム {os.path.basename(norm(p))} の書き込み", not exists, "excel")
 
 
-def derived_from(src, start):
-    """既にある資料へのお尋ねに答える資料か＝中身に「元の資料：<既にある md>」の印があり、その md が実在する（2026-10-23 専務承認）"""
-    m = re.search(r"元の資料：\s*([^\s<>\"']+\.md)", src or "")
-    if not m:
-        return ""
-    p = norm(m.group(1))
-    root = repo_root(start) or repo_root(os.getcwd())
-    for c in (p, (root + "/" + p) if root else ""):
-        if c and os.path.isfile(c):
-            return p
+def derived_from(src, start, exts=("md",)):
+    """既にある資料へのお尋ねに答える資料か＝中身に「元の資料：<既にある md>」の印があり、その md が実在する（2026-10-23 専務承認）。
+    エクセルを作るプログラムは exts=("py", "xlsx")＝既にあるプログラムかエクセルと同じ作りか（2026-11-09 専務承認）"""
+    for m in re.finditer(r"元の資料：\s*([^\s<>\"'）)]+\.(" + "|".join(exts) + r"))(?![A-Za-z0-9_])", src or ""):
+        p = norm(m.group(1))
+        root = repo_root(start) or repo_root(os.getcwd())
+        for c in (p, (root + "/" + p) if root else ""):
+            if c and os.path.isfile(c):
+                return p
     return ""
 
 
@@ -152,7 +157,16 @@ def target(tool, inp, cwd):
         p = inp.get("file_path") or ""
         if not is_deck_name(p):
             hit = excel_target(tool, inp, cwd)
-            return hit + ("" if hit[1] else "修正",) if hit else None
+            if not hit:
+                return None
+            if not hit[1]:
+                return hit + ("修正",)
+            # 新しく作るプログラムでも、既にある物と同じ作り（中身に「元の資料：<既にある .py か .xlsx>」）なら
+            # 元のクオリティのまま作る＝"派生"（2026-11-09 専務承認・控え帳 11/9 13:41 案2。
+            # 例＝アイカワ運輸・櫻井商事の照合表は 11/7 に「エスラインと同じ作り」と決まっていた）
+            body = (inp.get("content") or "") + (inp.get("new_string") or "") + "".join(
+                e.get("new_string", "") for e in inp.get("edits") or [] if isinstance(e, dict))
+            return hit + ("派生" if derived_from(body, os.path.dirname(norm(p)) or cwd, ("py", "xlsx")) else "",)
         exists = os.path.isfile(p)
         body = (inp.get("content") or "") + (inp.get("new_string") or "") + "".join(
             e.get("new_string", "") for e in inp.get("edits") or [] if isinstance(e, dict))
@@ -289,9 +303,11 @@ def deck_md_in(src):
 def diagnosis(evs):
     """私が「クオリティ診断」を伺ったあとの、専務の ①② のお答え。(①|②|なし|"", 専務の言葉)
     専務が「診断はあてずに」「診断なし」と言われた会話は「なし」＝止めず、控えも付けない（2026-10-22 専務指示）"""
+    # 2026-11-09 専務承認（控え帳 11/9 13:41・案2）：打ち消し（「診断なしはだめだ」「いや待て」）や問い返しのお言葉は数えない
     for e in evs:
         t = user_text(e)
-        if t and re.search(r"(クオリティ)?診断(は|を)?(あてず|当てず|あてない|当てない|なし|無し|不要|いらない|要らない)", t):
+        if t and NO_DIAG.search(t) and not t.strip().endswith(("？", "?")) and not (
+                AG is not None and AG.NO.search(NO_DIAG.sub("", t))):
             return "なし", t.strip()[:80]
     # 2026-11-04 専務承認（案3）：会話の中のいちばん新しいお答えを使う。私が伺う前のお言葉（「クオリティ診断は体裁だけでいいからな」）も数え、
     # 私が後でもう一度「クオリティ診断」と書いても前のお答えを捨てない。①②の記号だけは私が伺ったあとのお返事に限る（ほかの意味の①②と取り違えない）
@@ -364,7 +380,9 @@ def agreed_after(evs, *words):
 def agreed_after_plan(evs):
     """作る伺いへの専務の承認があるか。伺いと一緒にお出しする作りの説明を事前の見立てとする（2026-11-04 専務承認・案3＝
     「作ってよいか」の伺いにクオリティ診断を同じ文で入れるので、「クオリティ診断」を書いた伺いのあとの承認も数える）"""
-    return agreed_after(evs, "事前の見立て", "クオリティ診断")
+    # 2026-11-09 専務承認（控え帳 11/9 13:41・案2）：「診断」を書いた伺い（診断なしかを伺った文）のあとのお答えも数える。
+    # お答え（診断なし・体裁だけ など）を承認と数えるのは書き換え前の確認（approval-gate.py の diag_answer）と同じ判定
+    return agreed_after(evs, "事前の見立て", "クオリティ診断", "診断")
 
 
 def log(msg):
@@ -412,7 +430,14 @@ def main():
     lack = []
     mode, said = diagnosis(evs)
     if mode == "なし":
-        # 専務が診断をあてないと言われた＝止めない・控えも付けない（受付も採点も求めない）
+        # 専務が診断をあてないと言われた＝見本・手順書を求めず、控えも付けない（受付も採点も求めない）。
+        # ただし新しく作るときは、作る伺いへの専務のお返事を求める（2026-11-09 専務承認・案2＝書き換え前の確認と判定をそろえる。
+        # 伺いの無い所の「診断なし」だけで作り始めない）
+        if is_new and not agreed_after_plan(evs):
+            log(f"止めた\t{what}\t診断なし・作る伺いへのお返事が無い")
+            sys.stderr.write(f"[クオリティ診断] {what} を止めました（診断なし）。\n"
+                             "  ・作ってよいかの伺いへの専務のお返事が無い\n" + ASK_HELP)
+            return 2
         log(f"通した\t{what}\t診断なし（{said}）")
         return 0
     if not mode:
@@ -450,8 +475,16 @@ def main():
         f"[クオリティ診断] {what} を止めました。\n"
         + "".join(f"  ・{x}\n" for x in lack)
         + "手順書（setsumei-shiryo）を使い、クオリティ診断で①か②を専務に伺い、見本と物差し（docs/説明資料の物差し.md）を読み、"
-          "新しく作るときは事前の見立てをお出しして了承をいただいてから作ってください。\n")
+          "新しく作るときは事前の見立てをお出しして了承をいただいてから作ってください。\n"
+        + "見本・手順書を読むのは私の仕事です（専務にお返事をいただく項目ではありません）。\n" + ASK_HELP)
     return 2
+
+
+# 止めたときの、伺い方の決まり（2026-11-09 専務承認・控え帳 11/9 13:41 案2）
+ASK_HELP = ("伺い方：作ってよいかと、クオリティ診断（①体裁だけ／②体裁と中身／診断なし）を同じ文で1回だけ伺う。"
+            "お返事の言葉を指定しない（「『診断なし』とだけお返事ください」と書かない）。"
+            "お答え（診断なし・体裁だけ・作れ など）は、書き換え前の確認でも承認と数えます。\n"
+            "既にある物と同じ作りで新しく作るプログラムは、中身に「元の資料：<既にあるプログラムかエクセル>」と書けば診断は要りません。\n")
 
 
 if __name__ == "__main__":

@@ -76,6 +76,11 @@ NO = re.compile(r"いや|いいえ|違う|違い|ちがう|ではな|じゃな|�
 #   噛み砕きの物差しで作り直す指示そのもの＝承認。通すのは資料を作るプログラム（各参謀の scripts）の書き換えだけ
 #   （仕組みのファイル＝tools・lib・apps・.claude・dotfiles は今までどおり伺う）
 SIGNAL = re.compile(r"<command-name>/(?:噛み砕き|kamikudaki)</command-name>")
+# クオリティ診断へのお答え（2026-11-09 専務承認・控え帳 11/9 13:41「診断なし」「作れ」の二度手間・案2）：
+#   エクセル・スライド資料を作る伺いには同じ文でクオリティ診断を入れる決まり（11/4）なので、診断へのお答えは作る伺いへのお答え＝承認。
+#   作る前の確認（deck-gate.py）は「診断なし」で通るのに、この確認は「作れ」などが無いと止め、専務に2回お返事いただいていた
+DIAG = re.compile(r"(クオリティ)?診断(は|を)?(あてず|当てず|あてない|当てない|なし|無し|不要|いらない|要らない)"
+                  r"|体裁だけ|体裁と中身|A[＋+]B|[①②]")
 
 
 def norm(p):
@@ -144,10 +149,23 @@ def approved(text, prev=""):
     # 会話の流れ：私の伺いへの、受け入れるお返事（打ち消し・問い返しは除く）
     if not asked(prev):
         return False
+    if diag_answer(text, prev):
+        return True
     reply = text.strip()
     if reply.endswith(("？", "?")) or NO.search(reply):
         return False
     return bool(YES.search(reply))
+
+
+def diag_answer(text, prev):
+    """診断を入れた私の伺いへの、クオリティ診断のお答え（診断なし・体裁だけ・体裁と中身・①・②）か。
+    打ち消し（「診断なしはだめだ」「いや待て」）・問い返しは除く（2026-11-09 専務承認）"""
+    if "診断" not in (prev or ""):
+        return False
+    t = (text or "").strip()
+    if not t or t.endswith(("？", "?")) or not DIAG.search(t):
+        return False
+    return not NO.search(DIAG.sub("", t))     # 「診断不要」の「不要」を打ち消しと取り違えないよう、お答えの言葉を外して見る
 
 
 def hikaecho_delete(text):
