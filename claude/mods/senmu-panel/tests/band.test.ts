@@ -329,3 +329,59 @@ test('控え帳の〔消す〕は2回押すとその行だけ消える', async (
   expect((await pane.find({ key: 'tab-notes' }))?.text).toBe('控え帳 1')
   await pane.unmount()
 })
+
+// 毎朝8:10の原料在庫の確かめ（2026-11-12 専務指示「毎朝8:10にしてくれ」）
+//   asks＝操作盤が会話に送った依頼の文
+function mockGenryo(on: Parameters<TestBody>[1]) {
+  mockPull(on, { env: { COMPUTERNAME: 'MINO_SENMU' } })
+  const asks: string[] = []
+  on('prompt.submit', ($, e) => {
+    if (e.text.startsWith('【原料在庫の朝の確かめ')) asks.push(e.text)
+    return { text: e.text, context: e.context }
+  })
+  return asks
+}
+const at = (h: number, m: number, day = 12) => new Date(2026, 10, day, h, m, 0, 0).getTime()
+
+test('8:10より前に開いた会話では、8:10になったら1回だけ頼み、翌朝8:10にまた頼む', async ($, on) => {
+  const clock = mock.clock(on, { now: at(7, 0) })
+  mock.store(on)
+  const asks = mockGenryo(on)
+  await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
+  await clock.settle()
+  expect(asks.length).toBe(0)
+  await clock.set(at(8, 9))
+  expect(asks.length).toBe(0)
+  await clock.set(at(8, 10))
+  expect(asks.length).toBe(1)
+  await clock.set(at(23, 0))
+  expect(asks.length).toBe(1)
+  await clock.set(at(8, 10, 13))
+  expect(asks.length).toBe(2)
+})
+
+test('8:10を過ぎて開いた会話では開いたときに1回頼み、同じ日に開き直しても頼まない', async ($, on) => {
+  const clock = mock.clock(on, { now: at(9, 0) })
+  mock.store(on)
+  const asks = mockGenryo(on)
+  await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
+  await clock.advance(1000)                                            // 会話の始まりの1ミリ秒あとに待ち始める
+  expect(asks.length).toBe(1)
+  await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
+  await clock.advance(1000)
+  expect(asks.length).toBe(1)
+})
+
+test('自動の実行（claude -p）では頼まない', async ($, on) => {
+  const clock = mock.clock(on, { now: at(9, 0) })
+  mock.store(on)
+  mockPull(on, { env: { COMPUTERNAME: 'MINO_SENMU', CLAUDE_CODE_ENTRYPOINT: 'sdk-cli' } })
+  const asks: string[] = []
+  on('prompt.submit', ($, e) => {
+    asks.push(e.text)
+    return { text: e.text, context: e.context }
+  })
+  await $.session.start({ cwd: '/h/mino-sakura-hq', surface: 'desktop', isInteractive: true })
+  await clock.set(at(8, 10, 13))
+  expect(asks.length).toBe(0)
+})

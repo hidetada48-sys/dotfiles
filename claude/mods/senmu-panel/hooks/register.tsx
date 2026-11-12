@@ -14,13 +14,11 @@ import type { EffortPick, NoteItem, Pending, Tab } from '../types'
 const PLUGIN = 'senmu-panel'
 const PANE = 'senmu-panel'
 const TITLE = '専務の操作盤'
-// 日報アプリが前日の勤を全部確定したときに書く知らせ（apps/nippo/store.py notify_genryo・2026-11-10）
-// ★2026-11-10 届かなかった：操作盤（拡張）はネットワーク上のファイルを読めず、起動時に見張り先へ足せなかった（$.fs が断る）。
-//   そこでサーバーは Windows の小さなプログラム（hooks/genryo_watch.ps1）が受け持ち、書き換わったら中身の1行を操作盤へ渡す
-const GENRYO_DIR = '\\\\LS510DcB3\\mino_data\\18_共用アプリ\\抄紙日報\\日報アプリ\\知らせ'
-const GENRYO_NAME = '原料在庫.txt'
-const STORE_GENRYO = 'genryoNoticeDay'     // 最後に計算を頼んだ勤務日（同じ勤務日は1回だけ頼む）
-const STORE_GENRYO_ASKED = 'genryoAskedOn' // 計算を頼んだ日（その日はもう待たない＝1日1回・2026-11-10 専務承認）
+// 原料在庫の朝の確かめ：毎朝8:10に私へ依頼の文を送る（2026-11-12 専務指示「毎朝8:10にしてくれ」・承認「直せ」）
+// ★2026-11-12 日報の確定の知らせ（7:21）で頼む作り（2026-11-10〜）は、原料日誌のスキャン（8:04）より先に頼み計算できなかったのでやめた
+const GENRYO_HOUR = 8
+const GENRYO_MINUTE = 10
+const STORE_GENRYO_ASKED = 'genryoAskedOn' // 確かめを頼んだ日（同じ日は1回だけ頼む＝会話を開き直しても二重に頼まない）
 
 // 画面の表示に使う値（会話の間だけ。再読み込みでも消えない）
 const tab = atom({ plugin: 'senmu-panel', key: 'tab' } as const, 'pending' as Tab)
@@ -307,40 +305,45 @@ async function pickEffort($: Dollar, key: Exclude<EffortPick, ''>): Promise<void
   await $.store.set(STORE_EFFORT, next)
 }
 
-// 日報アプリが前日の勤を全部確定した＝知らせのファイルが書き換わった → 私に原料在庫の計算を頼む（2026-11-10 専務指示・承認）
-//   ・待つのは Windows のプログラム（hooks/genryo_watch.ps1）。書き換わりの合図を受けるだけで、私の利用量はかからない
-//   ・1日1回：計算を1回頼んだら、その時点で待つのをやめる（ループを抜けるとプログラムも止まる）。
-//     その日にもう頼んだあとは、新しい会話を開いても動かさない。翌日の最初の会話で、また待ち始める
-//   ・同じ勤務日の知らせは1回だけ頼む（確定し直しで同じ日が何度来ても二重に頼まない＝そのまま待ち続ける）
-//   ・会話を閉じている間に確定した日は、次の朝の定例業務 No.28 で計算される
-async function watchGenryo($: Dollar): Promise<void> {
+// 毎朝8:10に、私へ原料在庫の朝の確かめを頼む（2026-11-12 専務指示・承認）
+//   ・専務のチャットは要らない：8:10になると、操作盤が会話に依頼の文を自分で送る
+//   ・会話を開いたのが8:10より後で、その日まだ頼んでいなければ、開いたときに1回頼む
+//   ・1日1回：頼んだ日を控え、同じ日は会話を開き直しても頼まない。会話を開いたまま日をまたいだら翌朝8:10にまた頼む
+//   ・専務PC（Windows）だけ。自動の実行（claude -p）では頼まない
+const GENRYO_TEXT =
+  '【原料在庫の朝の確かめ（8:10）】前日の抄紙日報の確定と原料日誌のスキャンを確かめてください（production/scripts/genryo_asa.py --status）。' +
+  'そろっていれば同じ手順で原料在庫を計算し、足りなければ何が足りないかをチャットで返してください。'
+
+// その日の8:10（ミリ秒）
+function genryoTime(ms: number): number {
+  const d = new Date(ms)
+  d.setHours(GENRYO_HOUR, GENRYO_MINUTE, 0, 0)
+  return d.getTime()
+}
+
+// 頼む（同じ日にもう頼んでいれば何もしない）
+async function askGenryo($: Dollar): Promise<void> {
+  const day = await today($)
+  if ((await $.store.get(STORE_GENRYO_ASKED)) === day) return
+  await $.store.set(STORE_GENRYO_ASKED, day)
+  await $.prompt.submit({ text: GENRYO_TEXT })
+}
+
+// 次の8:10まで待って頼み、また次の8:10を待つ
+async function scheduleGenryo($: Dollar): Promise<void> {
   if (!(await $.env.get('COMPUTERNAME'))) return                       // Windows だけ（社内サーバーに届くのは専務PC）
-  if ((await $.env.get('CLAUDE_CODE_ENTRYPOINT')) === 'sdk-cli') return // 自動の実行（claude -p）では待たない
-  if ((await $.store.get(STORE_GENRYO_ASKED)) === (await today($))) return
-  const stream = $.process.spawn({
-    argv: ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-      `${$.plugin.root}/hooks/genryo_watch.ps1`, '-Dir', GENRYO_DIR, '-Name', GENRYO_NAME],
-  })
-  let buf = ''
-  for await (const c of stream) {
-    if (c.stream !== 'stdout') continue
-    buf += c.text
-    let i = buf.indexOf('\n')
-    while (i >= 0) {
-      const line = buf.slice(0, i).replace(/\r$/, '')
-      buf = buf.slice(i + 1)
-      i = buf.indexOf('\n')
-      if (!line.startsWith('NOTICE\t')) continue                       // READY・NOREACH などは読み流す
-      const [day = '', at = '', pc = ''] = line.slice('NOTICE\t'.length).split('\t')
-      if (day === '' || (await $.store.get(STORE_GENRYO)) === day) continue
-      await $.store.set(STORE_GENRYO, day)
-      await $.store.set(STORE_GENRYO_ASKED, await today($))
-      await $.prompt.submit({
-        text: `【日報アプリからの知らせ】${day} の勤が全部確定しました（${at}・${pc}）。原料在庫を計算してください（production/scripts/genryo_asa.py の手順）。原料日誌が無いなど計算できない時は、その理由をチャットで返してください。`,
-      })
-      return
-    }
+  if ((await $.env.get('CLAUDE_CODE_ENTRYPOINT')) === 'sdk-cli') return // 自動の実行（claude -p）では頼まない
+  const now = await $.clock.now()
+  let at = genryoTime(now)
+  if (now >= at) {
+    await askGenryo($)                                                 // 8:10を過ぎて開いた日は、開いたときに1回
+    at = genryoTime(now + 24 * 60 * 60 * 1000)                         // 次は翌朝8:10
   }
+  $.clock.after(at - now, () => {
+    scheduleGenryo($).catch(() => {
+      // 頼めなくても会話は続ける（次の会話を開いたときにまた待ち始める）
+    })
+  })
 }
 
 export const register: Register = on => {
@@ -361,10 +364,10 @@ export const register: Register = on => {
       // 読めなくても会話は続ける
     }
     await pullFirst($)
-    // 日報アプリの知らせを待ち始める（会話の始まりを止めないよう、待つのは別に走らせる）
+    // 毎朝8:10の原料在庫の確かめを待ち始める（会話の始まりを止めないよう、別に走らせる）
     $.clock.after(1, () => {
-      watchGenryo($).catch(() => {
-        // 待てなくても会話は続ける（次の朝の定例業務 No.28 で計算される）
+      scheduleGenryo($).catch(() => {
+        // 待てなくても会話は続ける（次の会話を開いたときにまた待ち始める）
       })
     })
     try {
