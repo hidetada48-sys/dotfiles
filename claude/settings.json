@@ -166,6 +166,11 @@
           },
           {
             "type": "command",
+            "command": "bash ~/.claude/scripts/teirei-alert.sh --prompt",
+            "timeout": 180
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/run-python.sh ~/.claude/hooks/memo-reminder.py"
           }
         ]
