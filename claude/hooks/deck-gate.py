@@ -5,7 +5,8 @@
   スライド資料・エクセルを新しく作る・直すときは、私が「クオリティ診断」で ①体裁だけ（A）か ②体裁と中身（A＋B）かを伺い、
   専務のお答えがあるまで書き込みを止める。お答えは対象ごとに mino-sakura-hq の .deck_stamps/診断/ に控え、
   採点（tools/check_deck.py）・エクセルの受付・ページ作りがその控えで①か②か・対象かを見分ける。
-  妥協の合格印（check_deck.py --accept）は、理由と妥協案のレポートのあとに専務の承認の言葉が無ければ止める。
+  専務の判断の合格印（check_deck.py --decide）は、指摘の一覧をお出ししたあとに専務のお答えが無ければ止める
+  （2026-11-16 専務承認。旧 妥協の合格印 --accept＝3回届かなければ理由と妥協案のレポートで伺う、はやめた）。
   エクセルを作るプログラムは、新しく書くときも直すときも対象（定例の作り直し＝プログラムを流すだけは対象外）。
 
 
@@ -377,6 +378,23 @@ def agreed_after(evs, *words):
     return state
 
 
+def answered_after(evs, word):
+    """私が word を含む文を最後にお出ししたあとに、専務のお答え（打ち消し・問い返し以外）があるか（2026-11-16 専務承認・案4）。
+    指摘の一覧へのお答えは「1と3を直せ」「全部このまま」などで、承認の言葉とは限らないため、お答えがあれば数える。
+    最後にお出しした一覧で見る＝仕組みの説明で「指摘の一覧」と書いた前のお返事を、一覧へのお答えと取り違えない"""
+    first = max((i for i, e in enumerate(evs) if e.get("type") == "assistant" and any(
+        b.get("type") == "text" and word in b.get("text", "") for b in blocks(e))), default=-1)
+    if first < 0:
+        return False
+    state = False
+    for e in evs[first:]:
+        t = user_text(e)
+        if not t or t.strip().endswith(("？", "?")):
+            continue
+        state = not is_refusal(t)
+    return state
+
+
 def agreed_after_plan(evs):
     """作る伺いへの専務の承認があるか。伺いと一緒にお出しする作りの説明を事前の見立てとする（2026-11-04 専務承認・案3＝
     「作ってよいか」の伺いにクオリティ診断を同じ文で入れるので、「クオリティ診断」を書いた伺いのあとの承認も数える）"""
@@ -402,15 +420,16 @@ def main():
         return 0
     tool, inp, cwd = data.get("tool_name", ""), data.get("tool_input") or {}, norm(data.get("cwd", ""))
     evs = None
-    # 妥協の合格印は、理由と妥協案のレポートをお出ししたあとの専務の承認の言葉が無ければ止める
-    if tool == "Bash" and re.search(r"python3?(\.exe)?\s+\S*check_deck\.py\s+--accept\b", inp.get("command", "")):
+    # 専務の判断の合格印（2026-11-16 専務承認・案4。旧 妥協の合格印 --accept の代わり）は、
+    # 指摘の一覧をお出ししたあとの専務のお答え（直す番号・全部このまま など）が無ければ止める
+    if tool == "Bash" and re.search(r"python3?(\.exe)?\s+\S*check_deck\.py\s+--decide\b", inp.get("command", "")):
         evs = events(data.get("transcript_path", ""))
-        if not agreed_after(evs, "妥協"):
-            log("止めた\t妥協の合格印\t専務の承認が無い")
-            sys.stderr.write("[クオリティ診断] 妥協の合格印を止めました。理由と妥協案のレポートをお出しし、"
-                             "専務の承認の言葉をいただいてから付けてください。\n")
+        if not answered_after(evs, "指摘の一覧"):
+            log("止めた\t専務の判断の合格印\t指摘の一覧へのお答えが無い")
+            sys.stderr.write("[クオリティ診断] 専務の判断の合格印を止めました。指摘の一覧をお出しし、"
+                             "直す番号のお答えをいただいてから付けてください。\n")
             return 2
-        log("通した\t妥協の合格印")
+        log("通した\t専務の判断の合格印")
         return 0
     hit = target(tool, inp, cwd)
     if not hit:

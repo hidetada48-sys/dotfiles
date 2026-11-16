@@ -107,7 +107,9 @@ def dead_links(msg):
                     spec = importlib.util.spec_from_file_location("check_deck", deck)
                     cd = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(cd)
-                    if cd.is_target(md) and not cd.verify(md):
+                    # 2026-11-16 専務承認：判断待ち（指摘の一覧を専務にお出しして、お答えを待つ間）も出してよい
+                    ok = getattr(cd, "openable", cd.verify)
+                    if cd.is_target(md) and not ok(md):
                         bad.append((u, "説明資料の採点に合格していない（python tools/check_deck.py で採点してから出す）"))
                         continue
                 except Exception as e:

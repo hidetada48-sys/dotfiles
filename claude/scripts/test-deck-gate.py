@@ -67,5 +67,22 @@ for name, src, want in derive_cases:
     ok = got == want
     bad += not ok
     print(("合格" if ok else "不合格"), name, f"扱い={got or '新規'}（期待 {want or '新規'}）")
+# 専務の判断の合格印（--decide）は、指摘の一覧をお出ししたあとの専務のお答えで通す（2026-11-16 専務承認・案4）
+LIST = "配送の効率の指摘の一覧です。直す番号をお選びください。"
+decide_cases = [
+    ("一覧のあと「1と3を直せ」", [A(LIST), U("1と3を直せ")], True),
+    ("一覧のあと「全部このまま」", [A(LIST), U("全部このまま")], True),
+    ("一覧のあと問い返しだけ", [A(LIST), U("2番はどういう意味？")], False),
+    ("一覧のあと打ち消し", [A(LIST), U("いや待て")], False),
+    ("一覧をお出ししていない", [A("採点しました。"), U("1を直せ")], False),
+    ("一覧の前のお言葉は数えない", [U("1を直せ"), A(LIST)], False),
+    ("仕組みの説明のあとの「直せ」は一覧へのお答えにしない",
+     [A("不合格なら指摘の一覧をお出しします。"), U("直せ"), A(LIST)], False),
+]
+for name, evs, want in decide_cases:
+    got = G.answered_after(evs, "指摘の一覧")
+    ok = got == want
+    bad += not ok
+    print(("合格" if ok else "不合格"), name, f"通す={got}（期待 {want}）")
 print("全部合格" if not bad else f"不合格 {bad}件")
 sys.exit(1 if bad else 0)
