@@ -80,6 +80,17 @@ signal_cases = [
     ("合図なしの参謀の scripts", report, "日報の資料を直してくれ", SCRIPT, 2),
     ("ほかのスラッシュの合図", report, "<command-name>/effort</command-name>", SCRIPT, 2),
 ]
+# 作業用の一覧（2026-11-17 専務承認・控え帳 11/16 12:03）：「リストアップして」のご依頼で、印のあるプログラムは通す
+LISTP = {"tool_name": "Write", "tool_input": {"file_path": "/home/x/mino-sakura-hq/sales/scripts/tokutan_list.py",
+                                              "content": "# 作業用の一覧：得意先別単価マスター（HAMTOKTAN）\nimport openpyxl\n"}}
+NOMARK = {"tool_name": "Write", "tool_input": {"file_path": "/home/x/mino-sakura-hq/sales/scripts/tokutan_list.py",
+                                               "content": "import openpyxl\n"}}
+signal_cases += [
+    ("11/16 リストアップしてくれ（印あり）", report, "日本住宅設備の単価をリストアップしてくれ", LISTP, 0),
+    ("リストアップ（印なし）は止める", report, "日本住宅設備の単価をリストアップしてくれ", NOMARK, 2),
+    ("リストアップでも仕組みのファイルは止める", report, "リストアップしてくれ", EDIT, 2),
+    ("リストアップの打ち消し", report, "いや、リストアップはまだだ", LISTP, 2),
+]
 for name, prev, reply, edit, want in signal_cases:
     got = run(prev, reply, edit)
     ok = got == want

@@ -488,8 +488,95 @@ def stop_on_make_without_diagnosis(body):
     print("NG：エクセル・スライド資料を作ってよいかの伺いに、クオリティ診断が入っていない。同じ伺いの中で診断も伺ってから出す：")
     print("  （例）この作りで○○のエクセルを作ってよろしいですか。クオリティ診断は①体裁だけ／②体裁と中身のどちらにしますか。")
     print("    既にある物の修正・定例の作り直しは診断を伺わない（その場合は「作って」でなく「直して」「作り直して」と書く）")
+    print("    マスター・台帳・業務DBの中身をそのまま並べる作業用の一覧は、作ってよいかも診断も伺わず、すぐ作る（2026-11-17 専務承認）")
     for h in hits[:3]:
         print(f"  「{h[:60]}」")
+    return True
+
+
+# ─── 控え帳 2026-11-16〜17 の3件（2026-11-17 専務「直せ」・正典＝mino-sakura-hq docs/plans/2026-11-17-控え帳11月16日〜17日の3件の原因と直し方.md）───
+_re = __import__("re")
+
+
+def _asked_line(inv):
+    """書き出しの「お尋ね：」の行（専務の言葉のまま）"""
+    m = _re.search(r"^\s*お尋ね\s*[：:](.*)$", inv or "", _re.M)
+    return m.group(1) if m else ""
+
+
+# 1件目：作業用の一覧（マスター・台帳・業務DBの中身をそのまま並べる一覧）は、作ってよいかもクオリティ診断も伺わない
+#   事例＝11/16 日本住宅設備の単価の「リストアップしてくれ」に「エクセルで作ってよいか・診断は①②どれか」と伺い、
+#   「マスターに登録されているとおりリストアップすればいいだろ　何を質問する必要があるんだ」と叱責された
+LIST_ASKED = _re.compile(r"リストアップ|一覧に(して|しろ|しておけ)|リストに(して|しろ)|書き出して|書き出せ")
+MAKE_ASK = _re.compile(r"作(って|成して|り)(も)?(よろし|よい|いい|良い)|作りますか|作成しますか|クオリティ診断")
+
+
+def stop_on_ask_for_work_list(inv, body):
+    if not LIST_ASKED.search(_asked_line(inv)):
+        return False
+    hits = [l.strip() for l in (body or "").splitlines() if MAKE_ASK.search(l)]
+    if not hits:
+        return False
+    print("NG：作業用の一覧のご依頼に、作ってよいか・クオリティ診断を伺っている。伺わずにすぐ作ってリンクで渡す（2026-11-17 専務承認）：")
+    print("  マスター・台帳・業務DBの中身を、登録の項目どおりに並べる。プログラムの先頭に「作業用の一覧：<マスターの名前>」と書く")
+    for h in hits[:3]:
+        print(f"  「{h[:60]}」")
+    return True
+
+
+# 2件目：場所を尋ねるお尋ねは、場所だけを1〜2行で答える。レポートにしない
+#   事例＝11/17 14:44 場所を伝えるだけで済むお尋ねに、レポートを作り文の点検を5回やり直して遅くなった
+PLACE_ASKED = _re.compile(r"どこ(に|へ|で)?(ある|あり|置|保存|入って|いる|しまっ)|場所(は|を|が|どこ)|どのフォルダ|在りか|ありか")
+
+
+def stop_on_place_report(inv):
+    if not PLACE_ASKED.search(_asked_line(inv)):
+        return False
+    print("NG：場所を尋ねるお尋ねなので、レポートにしない。場所だけを1〜2行で答える（2026-11-17 専務承認）：")
+    print("  説明を足さない。150字以内なら下書きも測りも要らない（〔B〕の例外）")
+    return True
+
+
+# 3件目：伺う・ご判断をいただくリストと表は、項目ごとに番号を付ける（専務が「3番はいらない」と指示できるように）
+#   事例＝11/17 16:00 専務「判断を要する場合、お前にそれを指示する場合、お互い番号があったほうがいいだろ」
+ASKING = _re.compile(r"よろし(い|く)|お決め|ご判断|ご指示|いかが|でしょうか|ますか[？?]|ください[。]?\s*$|お願いします", _re.M)
+BULLET = _re.compile(r"^\s*(?:[-*+]|・)\s*(.*)$")
+NUMBERED_HEAD = _re.compile(r"^(※|[①-⑳]|[0-9０-９]+[.．、)）]|No\.|NO\.|№|〔[0-9０-９]+〕|\[[^\]]*\]\([^)]*\)\s*$)")
+NO_HEAD = _re.compile(r"^\s*(No\.?|NO\.?|№|番号|#)\s*$")
+
+
+def unnumbered_lists(body):
+    """番号の無い箇条書きの行と、先頭に No. 列の無い表の見出しの行を返す（<!-- --> の中・```の中は見ない）"""
+    out, fence = [], False
+    rows = (body or "").splitlines()
+    for i, l in enumerate(rows):
+        if l.strip().startswith("```"):
+            fence = not fence
+            continue
+        if fence:
+            continue
+        m = BULLET.match(l)
+        if m and not NUMBERED_HEAD.match(m.group(1).strip()):
+            out.append(l.strip())
+            continue
+        # 表の見出しの行（次の行が |---| の区切り）
+        if l.strip().startswith("|") and i + 1 < len(rows) and _re.match(r"^\s*\|?\s*:?-{2,}", rows[i + 1]):
+            cells = [c for c in l.strip().strip("|").split("|")]
+            if not cells or not NO_HEAD.match(cells[0]):
+                out.append(l.strip())
+    return out
+
+
+def stop_on_unnumbered_asks(body):
+    if not ASKING.search(body or ""):
+        return False
+    bad = unnumbered_lists(body)
+    if not bad:
+        return False
+    print("NG：伺い・ご判断をいただく文があるのに、番号の無いリスト・表がある（2026-11-17 専務承認）。")
+    print("  専務が「3番はいらない」と指示できるよう、リストは 1. 2. 3.、表は先頭に No. 列を付けてから出す：")
+    for b in bad[:5]:
+        print(f"  「{b[:60]}」")
     return True
 
 
@@ -823,7 +910,11 @@ if __name__ == "__main__":
         sys.exit(1)
     if stop_on_no_self_check(inv, body):                  # ①''' 自分で確かめた物の欄（2026-11-04 専務承認）
         sys.exit(1)
+    if stop_on_ask_for_work_list(inv, body):              # 作業用の一覧は伺わずに作る（2026-11-17 専務承認）
+        sys.exit(1)
     if stop_on_make_without_diagnosis(body):              # ①'''' 作る伺いにクオリティ診断（2026-11-04 専務承認）
+        sys.exit(1)
+    if stop_on_unnumbered_asks(body):                     # 伺うリスト・表には番号（2026-11-17 専務承認）
         sys.exit(1)
     path = body_file(src, body)
     if rep:
@@ -831,6 +922,8 @@ if __name__ == "__main__":
         if (sys.argv[4] if len(sys.argv) >= 5 else None) not in PLACES:
             print("NG：レポートの置き場が指定されていない（または一覧に無い）。")
             print(PLACE_HELP)
+            sys.exit(1)
+        if stop_on_place_report(inv):                     # 場所のお尋ねはレポートにしない（2026-11-17 専務承認）
             sys.exit(1)
         if stop_on_figure_question(inv):                  # 図・数字の意味のお尋ねは図のスライドで答える（2026-10-23 専務承認）
             sys.exit(1)

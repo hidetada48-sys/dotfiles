@@ -60,6 +60,9 @@ derive_cases = [
     ("元の資料：既にあるプログラム", "# 元の資料：old_check.py\nimport openpyxl\nOUT='a.xlsx'\n", "派生"),
     ("元の資料：無いプログラム", "# 元の資料：none_check.py\nimport openpyxl\nOUT='a.xlsx'\n", ""),
     ("元の資料の印なし", "import openpyxl\nOUT='a.xlsx'\n", ""),
+    # 作業用の一覧（2026-11-17 専務承認・控え帳 11/16 12:03）＝伺わずに作る
+    ("作業用の一覧の印", "# 作業用の一覧：得意先別単価マスター（HAMTOKTAN）\nimport openpyxl\nOUT='a.xlsx'\n", "作業用"),
+    ("作業用の一覧の印だけで中身が空", "# 作業用の一覧：\nimport openpyxl\nOUT='a.xlsx'\n", ""),
 ]
 for name, src, want in derive_cases:
     hit = G.target("Write", {"file_path": NEW, "content": src}, d)

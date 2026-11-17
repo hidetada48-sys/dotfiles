@@ -216,6 +216,27 @@ def signal_ok(tool, inp, text):
     return any(r.search(p) for r in PROTECTED_RE) and not any(k in p for k in PROTECTED)
 
 
+# 作業用の一覧（2026-11-17 専務承認・控え帳 11/16 12:03）：「リストアップして」「一覧にして」のご依頼そのものを承認と数える。
+#   通すのは、中身に「作業用の一覧：<マスターの名前>」の印がある資料を作るプログラム（各参謀の scripts）の Edit・Write だけ
+#   （マスター・台帳・業務DBの中身をそのまま並べる一覧は分析ではないので、作ってよいかを伺わない）
+LIST_REQ = re.compile(r"リストアップ|一覧に(して|しろ|しておけ)|リストに(して|しろ)|書き出して|書き出せ")
+
+
+def work_list_ok(tool, inp, text):
+    if not text or not LIST_REQ.search(text) or NO.search(text) or tool not in ("Edit", "Write", "MultiEdit"):
+        return False
+    p = norm(inp.get("file_path") or "")
+    if not any(r.search(p) for r in PROTECTED_RE) or any(k in p for k in PROTECTED):
+        return False
+    body = (inp.get("content") or "") + (inp.get("new_string") or "") + "".join(
+        e.get("new_string", "") for e in inp.get("edits") or [] if isinstance(e, dict))
+    try:
+        body += open(p, encoding="utf-8").read() if os.path.isfile(p) else ""
+    except Exception:
+        pass
+    return bool(re.search(r"作業用の一覧：[ \t　]*[^\s]", body))
+
+
 def log(msg):
     try:
         d = os.path.join(os.path.expanduser("~"), ".claude", "logs")
@@ -240,6 +261,9 @@ def main():
         return 0
     if signal_ok(data.get("tool_name", ""), data.get("tool_input") or {}, text):
         log(f"通した（噛み砕きの合図）\t{what}")
+        return 0
+    if work_list_ok(data.get("tool_name", ""), data.get("tool_input") or {}, text):
+        log(f"通した（作業用の一覧のご依頼）\t{what}")
         return 0
     if approved(text, prev):
         log(f"通した\t{what}")
