@@ -35,18 +35,33 @@ for c in $ORDER; do
   if command -v "$c" >/dev/null 2>&1 && [ "$("$c" -c 'print(1)' 2>/dev/null)" = "1" ]; then PY="$c"; break; fi
 done
 
+# ★同じ会話では定例業務の2行を1回だけ出す（2026-11-18 専務承認「1と2で直せ」・重油電気の定例調査の会話で3回出た件）
+#   出した会話の番号（session_id）を teirei_shown/ に控え、同じ会話の2回目以降は出さない。7日より古い控えは消す
+SHOWN_DIR="$HOME/.claude/state/teirei_shown"
+
 if [ "$MODE" = "--prompt" ]; then
-  # 専務のチャットに「目次」「定例」があるかを見る（python が無ければ判断できないので何もしない）
+  # 専務のチャットが定例業務を求めているかを見る（python が無ければ判断できないので何もしない）
+  # ★取り違えを防ぐ（2026-11-18 専務承認 案1）＝「定例業務」の語があるとき、または「目次」「定例」だけの短いお尋ね
+  #   （空白と記号を除いて12字以内）のときだけ求めとみなす。「定例調査」「定例のつもり」などの長い文では出さない
+  # 出力は2行＝1行目が求めの種類（TEIREI／MOKUJI）、2行目が会話の番号
   [ -n "$PY" ] || exit 0
-  WORDS=$("$PY" -c 'import sys,json
+  PARSED=$("$PY" -c 'import sys,json,re
 try:
-    t=json.loads(sys.stdin.buffer.read().decode("utf-8","replace")).get("prompt") or ""
+    d=json.loads(sys.stdin.buffer.read().decode("utf-8","replace"))
 except Exception:
-    t=""
+    d={}
+t=d.get("prompt") or ""
+sid=re.sub(r"[^0-9A-Za-z_-]","",str(d.get("session_id") or ""))
+# 空白・記号・句読点を除いた長さで「短いお尋ね」かを決める
+norm=re.sub(r"[\s\W_]","",t)
+short=len(norm)<=12
 w=[]
-if "定例" in t: w.append("TEIREI")
-if "目次" in t: w.append("MOKUJI")
-print(" ".join(w))' 2>/dev/null)
+if "定例業務" in t or ("定例" in t and short): w.append("TEIREI")
+if "目次" in t and short: w.append("MOKUJI")
+print(" ".join(w))
+print(sid)' 2>/dev/null)
+  WORDS=$(printf '%s\n' "$PARSED" | sed -n '1p')
+  SID=$(printf '%s\n' "$PARSED" | sed -n '2p')
   ASK_TEIREI=0; ASK_MOKUJI=0
   case " $WORDS " in *" TEIREI "*) ASK_TEIREI=1 ;; esac
   case " $WORDS " in *" MOKUJI "*) ASK_MOKUJI=1 ;; esac
@@ -54,6 +69,20 @@ print(" ".join(w))' 2>/dev/null)
   if [ "$ASK_TEIREI" = 1 ]; then :
   elif [ "$ASK_MOKUJI" = 1 ] && [ "$DOW" -le 5 ]; then :
   else exit 0
+  fi
+  # 同じ会話で出し済みなら、判定し直さず1行だけ渡して終える（目次のリンクは出す）
+  if [ -n "$SID" ] && [ -f "$SHOWN_DIR/$SID" ]; then
+    if [ "$ASK_MOKUJI" = 1 ]; then
+      echo "【定例業務】この会話では定例業務の2行を出し済みのため、もう出さない（2026-11-18 専務承認）。目次のリンク（$MOKUJI_URL）だけを出す。"
+    else
+      echo "【定例業務】この会話では定例業務の2行を出し済みのため、もう出さない（2026-11-18 専務承認）。返答に定例業務の2行を書かない（専務が定例業務の件数をはっきり尋ねたときだけ、この会話で出し済みであることを1行で伝える）。"
+    fi
+    exit 0
+  fi
+  if [ -n "$SID" ]; then
+    mkdir -p "$SHOWN_DIR" 2>/dev/null
+    find "$SHOWN_DIR" -type f -mtime +7 -delete 2>/dev/null
+    echo "$TODAY" > "$SHOWN_DIR/$SID" 2>/dev/null
   fi
   echo ""
   if [ "$ASK_MOKUJI" = 1 ]; then
@@ -93,6 +122,20 @@ else
   fi
   mkdir -p "$HOME/.claude/state" 2>/dev/null
   echo "$TODAY" > "$STAMP" 2>/dev/null
+
+  # 月曜の起動で出した会話も「出し済み」として控える（同じ会話で「目次」と言われても2行を重ねて出さない・2026-11-18 専務承認）
+  if [ -n "$PY" ] && [ ! -t 0 ]; then
+    SID=$("$PY" -c 'import sys,json,re
+try:
+    d=json.loads(sys.stdin.buffer.read().decode("utf-8","replace"))
+except Exception:
+    d={}
+print(re.sub(r"[^0-9A-Za-z_-]","",str(d.get("session_id") or "")))' 2>/dev/null)
+    if [ -n "$SID" ]; then
+      mkdir -p "$SHOWN_DIR" 2>/dev/null
+      echo "$TODAY" > "$SHOWN_DIR/$SID" 2>/dev/null
+    fi
+  fi
 
   # 起動モードの案内（これまで週初回チェックが出していたもの）
   echo ""
