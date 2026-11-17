@@ -171,6 +171,10 @@
           },
           {
             "type": "command",
+            "command": "bash ~/.claude/scripts/kanri-pc-alert.sh"
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/run-python.sh ~/.claude/hooks/memo-reminder.py"
           }
         ]
