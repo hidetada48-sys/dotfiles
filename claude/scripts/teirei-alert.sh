@@ -62,6 +62,17 @@ print(" ".join(w))' 2>/dev/null)
     echo "【定例業務】専務が定例業務を求めたので、いま判定し直した。返答には下の定例業務の2行（要対応の件数＋表のリンク）を出す。"
   fi
 else
+  # ★新入社員の手続き（定例業務 No.32・2026-11-17 専務承認「足せ　その上で作れ」）＝曜日によらず、その日の最初の起動だけ流す
+  #   2週間ごとの火曜日（基準 11/17）は給与奉行から社員台帳を作り直して新入社員を拾い（専務PCだけ・承認なし）、
+  #   期限7日以内の入社の手続きがあれば Claude に1行を渡す（定例業務を月曜だけ出す決まりの例外）
+  NSTAMP="$HOME/.claude/state/nyusha_notified.txt"
+  if [ -n "$PY" ] && [ -f hr/scripts/nyusha_check.py ] && [ "$(cat "$NSTAMP" 2>/dev/null)" != "$TODAY" ]; then
+    mkdir -p "$HOME/.claude/state" 2>/dev/null
+    echo "$TODAY" > "$NSTAMP" 2>/dev/null
+    NYU=$(PYTHONIOENCODING=utf-8 "$PY" hr/scripts/nyusha_check.py --startup 2>/dev/null)
+    [ -n "$NYU" ] && { echo ""; echo "$NYU"; }
+  fi
+
   # 起動時：月曜以外は定例業務を出さない
   if [ "$DOW" -ne 1 ]; then
     if [ "$DOW" -le 5 ]; then
