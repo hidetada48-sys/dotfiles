@@ -153,6 +153,44 @@ if [ -z "$PY" ]; then
   exit 0
 fi
 
+# ★Linux では定例業務の表を作り直さない（2026-11-23 専務承認「全部進めろ」）
+#   Linux は社内サーバー・業務DBに届かないため、作り直すと「届かず」だらけの表になり、専務PC（Windows）の表と
+#   取り込みのたびにぶつかっていた（取り込みの一時退避が戻せず 10/17〜11/23 に6件たまった）。
+#   Linux では専務PCで作って GitHub から取り込んだ表をそのまま読み、要対応の件数と表のリンクだけを渡す。
+#   試験などで Linux でも作り直したいときだけ TEIREI_FORCE_WRITE=1 を付ける
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*) ;;
+  *)
+    if [ "${TEIREI_FORCE_WRITE:-0}" != "1" ]; then
+      YM=$(date +%Y-%m)
+      F="focus/定例業務/定例業務_${YM}.md"
+      URL="http://127.0.0.1:8830/focus/定例業務/定例業務_${YM}.html"
+      echo ""
+      echo "========== 定例業務（Linux・専務PCで作った表を読むだけ） =========="
+      if [ ! -f "$F" ]; then
+        echo "  今月の表（$F）はまだ専務PCで作られていない。"
+        echo "  → 【Claudeへ】専務に「今月の定例業務の表は、専務PCの次の起動で作ります」と1行で伝える。Linux で tools/teirei.py を流さない。"
+      else
+        JITEN=$(grep -m1 '時点' "$F")
+        N=$(grep -m1 -oE '^## 要対応（[0-9]+件）' "$F" | grep -oE '[0-9]+')
+        echo "  表の時点：$JITEN"
+        # 要対応の欄の行（見出しと区切りの行を除く）をそのまま渡す
+        awk '/^## 要対応/{f=1;next} /^## /{f=0} f && /^\| *[0-9]/' "$F" | sed 's/^/  /'
+        echo "  → 【Claudeへ・専務モード】Linux では表を作り直さない（python tools/teirei.py を流さない＝専務PCの表とぶつかるため）。チャットは2行だけ＝"
+        if [ -n "$N" ] && [ "$N" != "0" ]; then
+          echo "     「本日の定例業務は、要対応 ${N}件です。」"
+        else
+          echo "     「本日の定例業務は、要対応はありません。」"
+        fi
+        echo "     「[定例業務の実施状況（$(date +%Y)年$((10#$(date +%m)))月）](${URL})」"
+        echo "     表は専務PCで作った時点のもの。社内サーバー・業務DBを読む定例業務は、専務PCの次の起動で処理する。"
+      fi
+      echo "=============================================================="
+      exit 0
+    fi
+    ;;
+esac
+
 # 日報アプリの確定データ（社内サーバー）をリポジトリへコピーしてから判定する（届かなければ何もしない）
 if [ -f production/scripts/nippo_server_pull.py ]; then
   PULL=$(PYTHONIOENCODING=utf-8 "$PY" production/scripts/nippo_server_pull.py 2>/dev/null)
