@@ -19,9 +19,32 @@ if [ -f "$REPO/githooks/pre-commit" ] && [ "$(git -C "$REPO" config core.hooksPa
 fi
 
 # すでに listen していれば起こさない（エクセルの受付 8831 は下で別に見る）
+# 2026-11-23 専務指示：リンクを新しいタブで開く配信（tools/report_server.py）に替えた。
+# 古い配信（python -m http.server）が動いていたら止めて、新しい配信で起こし直す（応答の X-Mino-Report で見分ける）。
+SERVER="$REPO/tools/report_server.py"
 UP8830=0
 if command -v curl >/dev/null 2>&1; then
-    curl -s -m 2 -o /dev/null "http://127.0.0.1:$PORT/" && UP8830=1
+    HDR="$(curl -s -m 2 -o /dev/null -D - "http://127.0.0.1:$PORT/" 2>/dev/null)"
+    if [ -n "$HDR" ]; then
+        UP8830=1
+        if [ -f "$SERVER" ] && ! printf '%s' "$HDR" | grep -qi '^X-Mino-Report:'; then
+            # 古い配信を止める（8830 で待ち受けているプロセスだけ）
+            case "$(uname -s 2>/dev/null)" in
+              MINGW*|MSYS*|CYGWIN*)
+                for p in $(netstat -ano 2>/dev/null | grep -E "127\.0\.0\.1:$PORT[[:space:]].*LISTENING" | awk '{print $NF}' | sort -u); do
+                    taskkill //PID "$p" //F >/dev/null 2>&1
+                done ;;
+              *)
+                if command -v fuser >/dev/null 2>&1; then
+                    fuser -k "$PORT/tcp" >/dev/null 2>&1
+                elif command -v lsof >/dev/null 2>&1; then
+                    lsof -t -iTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | xargs -r kill 2>/dev/null
+                fi ;;
+            esac
+            sleep 1
+            UP8830=0
+        fi
+    fi
 fi
 
 mkdir -p "$OUT" 2>/dev/null
@@ -46,8 +69,15 @@ case "$(uname -s 2>/dev/null)" in
 esac
 
 if [ "$UP8830" = "0" ]; then
-    nohup "$PY" -m http.server "$PORT" --bind 127.0.0.1 --directory "$DIR_ARG" \
-          >/dev/null 2>&1 &
+    if [ -f "$SERVER" ]; then
+        SV_ARG="$SERVER"
+        command -v cygpath >/dev/null 2>&1 && SV_ARG="$(cygpath -w "$SERVER")"
+        nohup "$PY" "$SV_ARG" --port "$PORT" --directory "$DIR_ARG" >/dev/null 2>&1 &
+    else
+        # 新しい配信がまだ届いていないPCは、これまでの標準の配信で起こす
+        nohup "$PY" -m http.server "$PORT" --bind 127.0.0.1 --directory "$DIR_ARG" \
+              >/dev/null 2>&1 &
+    fi
     disown 2>/dev/null
 fi
 
