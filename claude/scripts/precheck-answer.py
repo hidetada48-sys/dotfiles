@@ -473,6 +473,44 @@ def stop_on_no_self_check(inv, body):
     return True
 
 
+# ─── 試した手段の欄（2026-11-26 専務「2，3，4だけを直せ」・控え帳 11/24「全てにおいてできることをあらゆる手段を尽くしてから俺に依頼しろ」・11/25「確かめろ　できることはすべてやれ」「だからお前は見ることができるだろ」）───
+# 返答に「できません」「確かめられていません」「見られない」「〜してください」など（一覧＝giveup_words.txt）があれば、
+# 書き出しに「試した手段：」の欄（手段ごとに、試した結果か使えない理由）を求める。
+# 使える手段＝社内サーバー・業務DB・専務の Chrome・アプリの中のブラウザ・画面の操作・別の書き方。
+# 専務にお願いしてよいのは、決まりで私ができないもの（パスワードの入力・アカウントの選択・承認・現場の紙）だけ。
+# 正典＝mino-sakura-hq docs/plans/2026-11-26-控え帳4件の修正方針.md
+TRIED_RE = __import__("re").compile(r"^\s*試した手段\s*[：:]\s*\S", __import__("re").M)
+
+
+def giveup_patterns():
+    """giveup_words.txt の正規表現を読む（無ければ空＝点検しない）"""
+    import os, re
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "giveup_words.txt")
+    try:
+        lines = open(path, encoding="utf-8").read().splitlines()
+    except OSError:
+        return []
+    return [re.compile(l.strip()) for l in lines if l.strip() and not l.strip().startswith("#")]
+
+
+def stop_on_no_tried_means(inv, body):
+    if TRIED_RE.search(inv or ""):
+        return False
+    hits = []
+    for l in (body or "").splitlines():
+        if any(p.search(l) for p in giveup_patterns()):
+            hits.append(l.strip())
+    if not hits:
+        return False
+    print("NG：「できません」「確かめられていません」「〜してください」などの文があるのに、書き出しに「試した手段」の欄が無い。")
+    print("    書く前に、使える手段（社内サーバー・業務DB・専務の Chrome・アプリの中のブラウザ・画面の操作・別の書き方）を試す：")
+    print("  試した手段：Console の残高＝専務の Chrome で開いて確認済み／パスワード＝決まりで私は入力できない")
+    print("    専務にお願いしてよいのは、決まりで私ができないもの（パスワードの入力・アカウントの選択・承認・現場の紙）だけ（2026-11-26 専務承認）")
+    for h in hits[:3]:
+        print(f"  「{h[:60]}」")
+    return True
+
+
 # ─── 作る伺いにクオリティ診断を入れる（2026-11-04 専務承認・控え帳 11/4 夜「クオリティ診断 作る前に方針を聞け」）───
 # エクセル・スライド資料を新しく作ってよいかを伺う文には、同じ返答の中でクオリティ診断（①体裁だけ／②体裁と中身）を伺う。
 # 11/4 夜「この作りで見本のエクセルを作ってよろしいですか」と伺い、「作れ」のあとで診断と見立てを別に伺って3回やりとりを増やした
@@ -909,6 +947,8 @@ if __name__ == "__main__":
     if stop_on_no_basis(inv):                             # ①'' 根拠の欄（2026-10-17 専務承認）
         sys.exit(1)
     if stop_on_no_self_check(inv, body):                  # ①''' 自分で確かめた物の欄（2026-11-04 専務承認）
+        sys.exit(1)
+    if stop_on_no_tried_means(inv, body):                 # 試した手段の欄（2026-11-26 専務承認）
         sys.exit(1)
     if stop_on_ask_for_work_list(inv, body):              # 作業用の一覧は伺わずに作る（2026-11-17 専務承認）
         sys.exit(1)

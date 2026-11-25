@@ -215,9 +215,22 @@ def exempt_kind(msg, last_user, prompt):
     if is_save_request(prompt):
         return "A保存"
     last = next((l.strip() for l in reversed(msg.split("\n")) if l.strip()), "")
-    if body_size(msg)[1] <= SHORT_LIMIT and not ASK_END_RE.search(last):
+    # ★2026-11-26 専務承認（控え帳 11/24・11/25）：「できません」「確かめられていません」「〜してください」などの言い方
+    #   （giveup_words.txt）がある返答は、短くても例外にしない＝出す前に「試した手段」の欄を書いて測る
+    if body_size(msg)[1] <= SHORT_LIMIT and not ASK_END_RE.search(last) and not has_giveup(msg):
         return "B短い"
     return ""
+
+
+def has_giveup(msg):
+    """返答に、手段を尽くす前に専務へ戻す言い方（giveup_words.txt）があるか"""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "giveup_words.txt")
+    try:
+        pats = [re.compile(l.strip()) for l in open(path, encoding="utf-8").read().splitlines()
+                if l.strip() and not l.strip().startswith("#")]
+    except (OSError, re.error):
+        return False
+    return any(p.search(msg) for p in pats)
 
 
 # ★2026-10-22 専務承認（控え帳2「独自の言葉」の直し方3）：種類Bの短い返答は出す前の点検をしないため、

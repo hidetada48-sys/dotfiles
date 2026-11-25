@@ -1,4 +1,4 @@
-# 測らなくてよい返答の試験（7場面）：html-gate.py に作り物の会話の記録を渡し、記録するか（block）しないか（skip）を見る
+# 測らなくてよい返答の試験（10場面）：html-gate.py に作り物の会話の記録を渡し、記録するか（block）しないか（skip）を見る
 import json, os, subprocess, sys, tempfile
 
 GATE = os.path.expanduser("~/dotfiles/claude/scripts/html-gate.py")
@@ -33,6 +33,8 @@ cases = [
     ("5 種類Bの短い返答", [("user", "どうなった", False)], ok, "skip"),
     ("6 151字の返答", [("user", "どうなった", False)], s151, "block"),
     ("7 150字以内でも伺いで終わる", [("user", "どうなった", False)], ask, "block"),
+    ("9 短くても「確かめられていません」は例外にしない", [("user", "どうなった", False)], "Console の画面を見られないため確かめられていません。", "block"),
+    ("10 短くても「実行してください」は例外にしない", [("user", "消して", False)], "PowerShell で次の1行を実行してください。消せます。", "block"),
     ("8 スキル本文の後でも保存の依頼を見分ける", [("user", "今日の作業をコミット・プッシュ・記憶まで保存して。", False), ("user", "Base directory for this skill: x", True)], "あ" * 200, "skip"),
 ]
 bad = 0
