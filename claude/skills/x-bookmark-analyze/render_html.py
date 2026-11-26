@@ -11,6 +11,7 @@
 使い方:
   python3 render_html.py                 # bookmarks内の最新「*分析.md」を自動でHTML化して配信
   python3 render_html.py <分析md>        # 指定した分析mdをHTML化して配信
+  python3 render_html.py <md> <出力名.html>  # 別資料を名前を決めてHTML化（分析レポートを上書きしない）
   ※ Windowsは python、Linux/WSLは python3 で呼ぶ（中身は共通）
 """
 
@@ -66,65 +67,53 @@ def inline(text: str) -> str:
 
 
 def md_to_body(md_text: str) -> str:
-    """レポートmdの本文をHTMLの本文（body内）に変換する"""
-    lines = md_text.splitlines()
-    out = []          # 出力HTML片
-    ul_open = False   # <ul>を開いている最中か
+    """レポートmdの本文をHTMLの本文（body内）に変換する
+    ★2026-11-26 専務指示「箇条書きごとに枠でくくって見づらい」：枠（カード）をやめ、
+      見出し＋番号・箇条の普通のリストにした。字下げした箇条は入れ子のリストにする"""
+    out = []      # 出力HTML片
+    stack = []    # 開いているリスト（種類 ol/ul と字下げの深さ）
 
-    def close_ul():
-        nonlocal ul_open
-        if ul_open:
-            out.append("</ul>")
-            ul_open = False
+    def close_to(indent):
+        # 指定の深さ以上のリストを閉じる
+        while stack and stack[-1][1] >= indent:
+            out.append(f"</li></{stack.pop()[0]}>")
 
-    for raw in lines:
+    for raw in md_text.splitlines():
         line = raw.rstrip()
+        m_ol = re.match(r"^(\s*)(\d+)\.\s+(.*)$", line)
+        m_ul = re.match(r"^(\s*)-\s+(.*)$", line)
+        if m_ol or m_ul:
+            ind = len((m_ol or m_ul).group(1))
+            kind = "ol" if m_ol else "ul"
+            text = m_ol.group(3) if m_ol else m_ul.group(2)
+            close_to(ind + 1)   # これより深いリストは閉じる
+            if stack and stack[-1][1] == ind and stack[-1][0] == kind:
+                out.append("</li>")   # 同じリストの次の項目
+            else:
+                if stack and stack[-1][1] == ind:   # 同じ深さで種類が変わる
+                    out.append(f"</li></{stack.pop()[0]}>")
+                # 番号が1以外から始まる（グループをまたぐ通し番号）ときは start を付ける
+                start = f' start="{m_ol.group(2)}"' if m_ol and m_ol.group(2) != "1" else ""
+                out.append(f"<{kind}{start}>")
+                stack.append((kind, ind))
+            out.append(f"<li>{inline(text)}")
+            continue
+        close_to(0)
         if not line.strip():
-            close_ul()
             continue
-        # 区切り線
         if line.strip() == "---":
-            close_ul()
-            continue
-        # 見出し
-        if line.startswith("### "):
-            close_ul()
+            out.append("<hr>")
+        elif line.startswith("### "):
             out.append(f"<h3>{inline(line[4:])}</h3>")
-            continue
-        if line.startswith("## "):
-            close_ul()
+        elif line.startswith("## "):
             out.append(f"<h2>{inline(line[3:])}</h2>")
-            continue
-        if line.startswith("# "):
-            close_ul()
-            out.append(f'<h1>{inline(line[2:])}</h1>')
-            continue
-        # 番号付き項目（1. ... ）→ カード
-        m = re.match(r"^\d+\.\s+(.*)$", line)
-        if m:
-            if not ul_open:
-                out.append('<ul class="items">')
-                ul_open = True
-            num = line.split(".", 1)[0]
-            out.append(f'<li class="item"><span class="num">{num}.</span>{inline(m.group(1))}</li>')
-            continue
-        # 箇条書き（- ... ）→ カード
-        if line.startswith("- "):
-            if not ul_open:
-                out.append('<ul class="items">')
-                ul_open = True
-            out.append(f'<li class="item">{inline(line[2:])}</li>')
-            continue
-        # 「**作成日：...**」など meta 行
-        if line.startswith("**") and line.endswith("**"):
-            close_ul()
+        elif line.startswith("# "):
+            out.append(f"<h1>{inline(line[2:])}</h1>")
+        elif line.startswith("**") and line.endswith("**"):
             out.append(f'<div class="meta">{inline(line)}</div>')
-            continue
-        # それ以外は段落（リード文など）
-        close_ul()
-        out.append(f'<p class="lead">{inline(line)}</p>')
-
-    close_ul()
+        else:
+            out.append(f"<p>{inline(line)}</p>")
+    close_to(0)
     return "\n".join(out)
 
 
@@ -135,24 +124,25 @@ PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{title}</title>
 <style>
-  :root{{--p1:#e6462e;--p2:#e08a1e;--p3:#3a7bd5;--bg:#f7f7f5;--card:#fff;--ink:#2b2b2b;--muted:#777;--line:#e5e2dc;}}
-  *{{box-sizing:border-box;}}
-  body{{margin:0;background:var(--bg);color:var(--ink);line-height:1.75;
+  /* ★2026-11-26 枠（カード）をやめた体裁。見出しの下線と番号だけで区切る */
+  body{{margin:0;background:#fff;color:#222;line-height:1.8;
     font-family:system-ui,-apple-system,"Segoe UI","Hiragino Kaku Gothic ProN",Meiryo,sans-serif;}}
-  .wrap{{max-width:860px;margin:0 auto;padding:32px 20px 80px;}}
-  h1{{font-size:1.6rem;margin:0 0 6px;border-bottom:3px solid var(--ink);padding-bottom:14px;}}
-  h2{{font-size:1.2rem;margin:34px 0 12px;padding-left:12px;border-left:5px solid var(--ink);}}
-  h3{{font-size:1rem;margin:20px 0 8px;color:#444;}}
-  .meta{{color:var(--muted);font-size:.9rem;}}
-  .lead{{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:14px 0;}}
-  ul.items{{padding-left:0;list-style:none;margin:0;}}
-  li.item{{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0;}}
-  .num{{font-weight:700;color:var(--muted);margin-right:6px;}}
-  .tag{{display:inline-block;color:#fff;font-size:.72rem;font-weight:700;padding:2px 8px;border-radius:999px;margin-right:8px;}}
-  .p1{{background:var(--p1);}} .p2{{background:var(--p2);}} .p3{{background:var(--p3);}}
-  a{{color:var(--p3);}}
-  code{{background:#eee;padding:1px 5px;border-radius:4px;font-size:.9em;}}
-  footer{{margin-top:40px;color:var(--muted);font-size:.82rem;text-align:center;}}
+  .wrap{{max-width:860px;margin:0 auto;padding:32px 20px 60px;}}
+  h1{{font-size:1.5rem;margin:0 0 8px;}}
+  h2{{font-size:1.2rem;margin:32px 0 8px;padding-bottom:4px;border-bottom:1px solid #ccc;}}
+  h3{{font-size:1.02rem;margin:20px 0 4px;}}
+  .meta{{color:#555;font-size:.92rem;}}
+  p{{margin:4px 0;}}
+  ol,ul{{margin:4px 0;padding-left:1.6em;}}
+  li{{margin:3px 0;}}
+  hr{{border:none;border-top:1px solid #ddd;margin:28px 0;}}
+  /* ★2026-11-26 専務指示：P1〜P3 は色の四角に白い太字（本文と同じ大きさ）で目立たせる */
+  .tag{{display:inline-block;color:#fff;font-weight:700;font-size:1em;line-height:1.4;
+    padding:0 7px;border-radius:4px;margin-right:6px;}}
+  .p1{{background:#d0392b;}} .p2{{background:#d9822b;}} .p3{{background:#2e6db4;}}
+  a{{color:#2e6db4;}}
+  code{{background:#f1f1f1;padding:0 4px;border-radius:3px;font-size:.92em;}}
+  footer{{margin-top:40px;color:#888;font-size:.82rem;text-align:center;}}
 </style>
 </head>
 <body>
@@ -191,8 +181,13 @@ def main():
     md_text = md_path.read_text(encoding="utf-8")
     m = re.search(r"\d{4}-\d{2}-\d{2}", md_path.name)  # ファイル名から日付を拾う
     title = f"ブックマーク分析レポート {m.group(0)}" if m else "ブックマーク分析レポート"
+    # 分析レポート以外（項目の説明などの別資料）は、md の1行目の見出しを題名にする
+    h1 = re.search(r"^# (.+)$", md_text, re.M)
+    if not md_path.name.endswith("分析.md") and h1:
+        title = h1.group(1)
     body = md_to_body(md_text)
-    out_name = out_html_name(md_path)
+    # 3つ目の引数で出力の名前を決められる（別資料が分析レポートの HTML を上書きしないように）
+    out_name = sys.argv[2] if len(sys.argv) > 2 else out_html_name(md_path)
     out_path = BOOKMARKS_DIR / out_name
     out_path.write_text(PAGE.format(title=html.escape(title), body=body), encoding="utf-8")
 
